@@ -1605,19 +1605,23 @@ process.once('SIGTERM', () => {
   process.exit();
 });
 
-// Initialize bot before server starts
+const http = require('http');
+
+const server = http.createServer(app);
+
+// Initialize bot
 const botModule = initBot();
 bot = botModule.bot;
 startBot = botModule.startBot;
 handleUpdate = botModule.handleUpdate;
 
-// Telegram Webhook endpoint - must be before app.listen
+// Telegram Webhook endpoint
 app.use('/telegraf', Telegraf.webhookCallback(bot, 'express'));
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
-  // Start bot with delay
+  // Start bot
   setTimeout(() => {
     startBot().then(() => console.log('🤖 Bot started')).catch(() => {});
   }, 3000);
