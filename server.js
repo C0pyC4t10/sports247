@@ -1607,24 +1607,34 @@ process.once('SIGTERM', () => {
 
 const http = require('http');
 
+let botModule;
+
 const server = http.createServer(app);
 
-// Initialize bot
-const botModule = initBot();
-bot = botModule.bot;
-startBot = botModule.startBot;
-handleUpdate = botModule.handleUpdate;
+app.use(express.json());
 
-// Telegram Webhook endpoint
-app.use('/telegraf', Telegraf.webhookCallback(bot, 'express'));
+app.post('/telegraf', async (req, res) => {
+  try {
+    if (botModule && botModule.handleUpdate) {
+      await botModule.handleUpdate(req.body);
+    }
+    res.send('OK');
+  } catch (err) {
+    console.log('Webhook error:', err.message);
+    res.send('OK');
+  }
+});
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
-  // Start bot
-  setTimeout(() => {
-    startBot().then(() => console.log('🤖 Bot started')).catch(() => {});
-  }, 3000);
+  botModule = initBot();
+  bot = botModule.bot;
+  startBot = botModule.startBot;
+  handleUpdate = botModule.handleUpdate;
+  
+  await startBot();
+  console.log('🤖 Bot started');
 });
 
 // Global error handlers to prevent crash
