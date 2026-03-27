@@ -4,8 +4,8 @@ const axios = require('axios');
 const cors = require('cors');
 const cheerio = require('cheerio');
 const Parser = require('rss-parser');
-const BRAND = require('./brand/brand');
-const { initBot } = require('./tg-bot');
+const BRAND = require('./brand');
+const { initBot } = require('./index');
 let bot, startBot, handleUpdate;
 
 const app = express();
@@ -14,7 +14,7 @@ const parser = new Parser();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(express.static('public'));
+
 
 function detectCategory(title) {
   const text = title.toLowerCase();
@@ -1439,9 +1439,9 @@ app.post('/generate-visual', async (req, res) => {
 });
 
 // Serve static files
-app.use(express.static('public'));
+app.use(express.static('.'));
 app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+  res.sendFile(__dirname + '/index.html');
 });
 
 // Telegram Webhook endpoint - will be set after bot initializes
