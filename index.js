@@ -472,10 +472,12 @@ This creates an image with title bar like the web app!`, { parse_mode: 'Markdown
 
   bot.on('callback_query', async (ctx) => {
     try {
+      console.log('🔘 Callback received:', JSON.stringify(ctx.callbackQuery));
       const query = ctx.callbackQuery.data;
       const chatId = ctx.callbackQuery.message.chat.id;
+      const userId = ctx.callbackQuery.from.id;
       
-      console.log('Callback query received:', query);
+      console.log('Button click:', query, 'from user:', userId);
       
       await ctx.answerCallbackQuery();
       
