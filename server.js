@@ -4,6 +4,7 @@ const axios = require('axios');
 const cors = require('cors');
 const cheerio = require('cheerio');
 const Parser = require('rss-parser');
+const { Telegraf } = require('telegraf');
 const BRAND = require('./brand');
 const { initBot } = require('./index');
 let bot, startBot, handleUpdate;
@@ -14,7 +15,6 @@ const parser = new Parser();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
 
 function detectCategory(title) {
   const text = title.toLowerCase();
@@ -1086,19 +1086,107 @@ app.post('/generate-visual', async (req, res) => {
         // Generate AI image using multiple free services
         let generated = false;
         
-        // Try method 1: Pollinations with flux model (if it works)
+        // Try method 0: FluxImageGen (free, no auth required)
+        if (!generated) {
+          try {
+            console.log('Trying FluxImageGen (free API)...');
+            const fluxResponse = await axios.post('https://fluximagegen.com/api/generate', {
+              prompt: variationPrompt,
+              style: 'photorealism'
+            }, {
+              timeout: 60000
+            });
+            
+            if (fluxResponse.data && fluxResponse.data.success && fluxResponse.data.imageUrl) {
+              console.log('FluxImageGen URL:', fluxResponse.data.imageUrl);
+              const fluxImgResponse = await axios.get(fluxResponse.data.imageUrl, {
+                responseType: 'arraybuffer',
+                timeout: 60000
+              });
+              baseImageBuffer = Buffer.from(fluxImgResponse.data);
+              generated = true;
+              console.log('FluxImageGen image generated successfully');
+            }
+          } catch (fluxError) {
+            console.error('FluxImageGen failed:', fluxError.message);
+          }
+        }
+        
+        // Try method 0b: Black Forest Labs FLUX via OpenRouter (if credits available)
+        if (!generated && process.env.OPENROUTER_API_KEY) {
+          try {
+            console.log('Trying Black Forest FLUX via OpenRouter...');
+            const fluxResponse = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+              model: "black-forest-labs/flux-1-schnell",
+              messages: [
+                { role: "user", content: variationPrompt }
+              ]
+            }, {
+              headers: {
+                'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://sports247-2.onrender.com',
+                'X-Title': 'SPORTS247'
+              },
+              timeout: 60000
+            });
+            
+            const fluxImageUrl = fluxResponse.data.choices[0].message.content;
+            console.log('FLUX generated URL:', fluxImageUrl);
+            
+            if (fluxImageUrl && fluxImageUrl.startsWith('http')) {
+              const fluxImgResponse = await axios.get(fluxImageUrl, {
+                responseType: 'arraybuffer',
+                timeout: 60000
+              });
+              baseImageBuffer = Buffer.from(fluxImgResponse.data);
+              generated = true;
+              console.log('FLUX image generated successfully');
+            }
+          } catch (fluxError) {
+            console.error('FLUX failed:', fluxError.message);
+          }
+        }
+        
+        // Try method 1: AI Image Generator (free, no auth)
+        if (!generated) {
+          try {
+            console.log('Trying AI Image Generator API...');
+            const aiGenResponse = await axios.post('https://image.pollinations.ai/prompt/' + encodeURIComponent(variationPrompt), {
+              width: Math.min(finalWidth, 512),
+              height: Math.min(finalHeight, 512),
+              nologo: true,
+              seed: variationSeed || Math.floor(Math.random() * 10000)
+            }, {
+              timeout: 60000,
+              responseType: 'arraybuffer'
+            });
+            
+            if (aiGenResponse.data && aiGenResponse.data.length > 1000) {
+              baseImageBuffer = Buffer.from(aiGenResponse.data);
+              generated = true;
+              console.log('AI Image Generator worked');
+            }
+          } catch (aiGenError) {
+            console.error('AI Image Generator failed:', aiGenError.message);
+          }
+        }
+        
+        // Try method 2: Pollinations with flux model (if it works)
         try {
           const enhancedPrompt = enhanceImagePrompt(variationPrompt, sportType);
           const seed = variationSeed || Math.floor(Math.random() * 10000);
           
           console.log('Trying Pollinations with prompt:', enhancedPrompt.substring(0, 60));
           
-          const pollinUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=${finalWidth}&height=${finalHeight}&nologo=true&seed=${seed}&enhance=true`;
+          // Try new Pollinations API format
+          const pollinUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=${finalWidth}&height=${finalHeight}&nologo=true&seed=${seed}&enhance=true&mode=relaxed`;
           
           const imgResponse = await axios.get(pollinUrl, { 
             responseType: 'arraybuffer', 
             timeout: 90000,
-            maxRedirects: 5
+            maxRedirects: 5,
+            headers: { 'Accept': 'image/png,image/jpeg,*/*' }
           });
           
           if (imgResponse.data && imgResponse.data.length > 1000) {
@@ -1108,6 +1196,25 @@ app.post('/generate-visual', async (req, res) => {
           }
         } catch (pollinError) {
           console.error('Pollinations failed:', pollinError.message);
+        }
+        
+        // Try method 1.5: Use free image generation via API
+        if (!generated) {
+          try {
+            console.log('Trying Free Image Gen API...');
+            const freeApiUrl = `https://image.pollinations.ai/v1/prompt?prompt=${encodeURIComponent(variationPrompt)}&width=${Math.min(finalWidth, 768)}&height=${Math.min(finalHeight, 768)}&nologo=true`;
+            const freeResponse = await axios.get(freeApiUrl, {
+              responseType: 'arraybuffer',
+              timeout: 90000
+            });
+            if (freeResponse.data && freeResponse.data.length > 1000) {
+              baseImageBuffer = Buffer.from(freeResponse.data);
+              generated = true;
+              console.log('Free API image generated');
+            }
+          } catch (freeError) {
+            console.error('Free API failed:', freeError.message);
+          }
         }
         
         // Try method 2: Use Hugging Face if Pollinations failed
@@ -1157,15 +1264,56 @@ app.post('/generate-visual', async (req, res) => {
           }
         }
         
+        // Try method 4: Direct Pollinations without image. prefix
+        if (!generated) {
+          try {
+            console.log('Trying direct Pollinations...');
+            const directUrl = `https://pollinations.ai/prompt/${encodeURIComponent(variationPrompt)}?width=${Math.min(finalWidth, 512)}&height=${Math.min(finalHeight, 512)}&nologo=true`;
+            const directResponse = await axios.get(directUrl, { 
+              responseType: 'arraybuffer', 
+              timeout: 60000 
+            });
+            if (directResponse.data && directResponse.data.length > 1000) {
+              baseImageBuffer = Buffer.from(directResponse.data);
+              generated = true;
+              console.log('Direct Pollinations worked');
+            }
+          } catch (directError) {
+            console.error('Direct Pollinations failed:', directError.message);
+          }
+        }
+        
+        // Try method 5: Use anyscale or other free API
+        if (!generated) {
+          try {
+            console.log('Trying alternative free API...');
+            // Try using a different free image service
+            const altApiUrl = `https://image.pollinations.ai/v1/generate?prompt=${encodeURIComponent(variationPrompt)}&width=${Math.min(finalWidth, 512)}&height=${Math.min(finalHeight, 512)}&seed=${variationSeed || Math.floor(Math.random() * 10000)}`;
+            const altApiResponse = await axios.get(altApiUrl, {
+              responseType: 'arraybuffer',
+              timeout: 60000,
+              headers: { 'Accept': 'image/*' }
+            });
+            if (altApiResponse.data && altApiResponse.data.length > 1000) {
+              baseImageBuffer = Buffer.from(altApiResponse.data);
+              generated = true;
+              console.log('Alternative API worked');
+            }
+          } catch (altApiError) {
+            console.error('Alternative API failed:', altApiError.message);
+          }
+        }
+        
         // Final fallback: Sports-themed random image from Unsplash
         if (!generated) {
           console.error('All AI generation failed, using sports image fallback');
           const sportsImages = [
-            'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=1024',
-            'https://images.unsplash.com/photo-1574629810360-7ef0d255b286?w=1024',
-            'https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=1024',
-            'https://images.unsplash.com/photo-1461896836934- voices-4d72c2273a3?w=1024',
-            'https://images.unsplash.com/photo-1431324155629-1a6deb8dec8a?w=1024'
+            'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800&q=80',
+            'https://images.unsplash.com/photo-1574629810360-7ef0d255b286?w=800&q=80',
+            'https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=800&q=80',
+            'https://images.unsplash.com/photo-1431324155629-1a6deb8dec8a?w=800&q=80',
+            'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&q=80',
+            'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80'
           ];
           const randomImage = sportsImages[Math.floor(Math.random() * sportsImages.length)];
           const fallbackResponse = await axios.get(randomImage, { 
@@ -1466,10 +1614,8 @@ app.listen(PORT, () => {
   startBot = botModule.startBot;
   handleUpdate = botModule.handleUpdate;
   
-  // Telegram Webhook endpoint - add after bot is initialized
-  app.use('/telegraf', (req, res, next) => {
-    handleUpdate(req.body).then(() => res.send('OK')).catch(next);
-  });
+  // Telegram Webhook endpoint - use Telegraf's express middleware
+  app.use('/telegraf', Telegraf.webhookCallback(bot, 'express'));
   
   // Start bot with delay
   setTimeout(() => {

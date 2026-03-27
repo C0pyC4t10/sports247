@@ -56,7 +56,7 @@ function initBot() {
       const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
         model: "openai/gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You are SPORTS247 AI assistant - a helpful, friendly sports expert. You help users with sports news, match analysis, predictions, and any sports-related questions. Keep responses concise, engaging, and use emojis." },
+          { role: "system", content: "You are SPORTS247 AI assistant - a helpful, friendly sports expert. You help users with sports news, match analysis, predictions, and any sports-related questions. IMPORTANT: You CAN generate images using /image command and create social media posts using /generate command. When users ask 'what can you do' or 'your skills', tell them about: News (cricket, football, basketball, tennis), AI Chat, Generate Posts, Generate Images, Analyze Articles. Keep responses concise, engaging, and use emojis." },
           ...history.slice(-10),
           { role: "user", content: message }
         ]
@@ -355,7 +355,10 @@ Choose an option from the menu below:`, {
     
     // Check if user is asking about bot capabilities
     const lowerMsg = message.toLowerCase();
-    if (lowerMsg.includes('what can you do') || lowerMsg.includes('your skills') || lowerMsg.includes('help me') || lowerMsg.includes('what are your features')) {
+    const skillsKeywords = ['what can you do', 'your skills', 'help me', 'what are your features', 'bot commands', 'what do you do', 'your abilities', 'list commands'];
+    const isSkillsQuestion = skillsKeywords.some(keyword => lowerMsg.includes(keyword));
+    
+    if (isSkillsQuestion) {
       await sendMsg(chatId, `🏆 *SPORTS247 Bot Skills:*
 
 📰 *News* - Get latest sports news (cricket, football, basketball, tennis)
@@ -388,12 +391,15 @@ Choose an option from the menu below:`, {
   });
 
   bot.on('callback_query', async (ctx) => {
-    const query = ctx.callbackQuery.data;
-    const chatId = ctx.callbackQuery.message.chat.id;
-    
-    await ctx.answerCallbackQuery();
-    
-    if (query === 'news_all') {
+    try {
+      const query = ctx.callbackQuery.data;
+      const chatId = ctx.callbackQuery.message.chat.id;
+      
+      console.log('Callback query received:', query);
+      
+      await ctx.answerCallbackQuery();
+      
+      if (query === 'news_all') {
       await sendNews(chatId, 'all');
     } else if (query === 'news_cricket') {
       await sendNews(chatId, 'cricket');
@@ -429,6 +435,10 @@ Choose an option from the menu below:`, {
       const userId = ctx.from.id;
       userChats.set(userId, []);
       await sendMsg(chatId, '✅ Chat history cleared!');
+    }
+    } catch (error) {
+      console.log('Callback error:', error.message);
+      await ctx.answerCallbackQuery('Error occurred. Try again.');
     }
   });
 
