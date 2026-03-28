@@ -569,20 +569,12 @@ This creates an image with title bar like the web app!`, { parse_mode: 'Markdown
       await setCommands();
       console.log('Commands registered');
       
-      if (WEBHOOK_URL) {
-        console.log('Setting webhook to:', WEBHOOK_URL);
-        await bot.telegram.setWebhook(WEBHOOK_URL);
-        console.log('✅ Webhook set successfully!');
-      } else {
-        console.log('Starting polling mode...');
-        await bot.launch({
-          polling: {
-            timeout: 60,
-            interval: 1000
-          }
-        });
-        console.log('🤖 Bot started with polling!');
-      }
+      // Always use webhook mode
+      const webhookUrl = process.env.WEBHOOK_URL || 'https://sports247-2.onrender.com/telegraf';
+      console.log('Setting webhook to:', webhookUrl);
+      await bot.telegram.setWebhook(webhookUrl);
+      console.log('✅ Webhook set successfully!');
+      
     } catch (error) {
       console.log('Bot error:', error.message);
     }
