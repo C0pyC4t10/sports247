@@ -6,8 +6,15 @@ const cheerio = require('cheerio');
 const Parser = require('rss-parser');
 const { Telegraf } = require('telegraf');
 const http = require('http');
-const BRAND = require('./brand');
-const { initBot } = require('./index');
+let BRAND;
+let initBot;
+try {
+  BRAND = require('./brand/brand');
+  initBot = require('./tg-bot').initBot;
+} catch (e) {
+  console.log('Brand/Bot load error:', e.message);
+  BRAND = { image: {} };
+}
 let bot, startBot, handleUpdate;
 
 const app = express();
@@ -1595,10 +1602,6 @@ app.get('/', (req, res) => {
 
 // Bot variables
 let botModule;
-let bot;
-
-// Use http.createServer to handle telegraf route properly
-const http = require('http');
 
 // Custom handler that processes updates
 const handleTelegramUpdate = async (req, res) => {
