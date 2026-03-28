@@ -8,6 +8,7 @@ const { Telegraf } = require('telegraf');
 const http = require('http');
 let BRAND;
 let initBot;
+let botModule;
 
 try {
   BRAND = require('./brand');
@@ -20,10 +21,11 @@ try {
 }
 
 try {
-  const botModule = require('./tg-bot');
-  initBot = botModule.initBot;
+  const botModuleImport = require('./tg-bot');
+  initBot = botModuleImport.initBot;
+  console.log('✅ Bot module loaded successfully');
 } catch (e) {
-  console.log('Bot load error:', e.message);
+  console.log('❌ Bot load error:', e.message);
 }
 
 let bot, startBot, handleUpdate;
@@ -1645,6 +1647,7 @@ const server = http.createServer((req, res) => {
             res.end('OK');
           });
         } else {
+          console.log('Webhook called but botModule not ready');
           res.writeHead(200);
           res.end('Bot initializing...');
         }
@@ -1662,18 +1665,24 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
-  setTimeout(() => {
+  setTimeout(async () => {
     try {
+      if (!initBot) {
+        console.log('❌ initBot not found, retrying...');
+        const botModuleImport = require('./tg-bot');
+        initBot = botModuleImport.initBot;
+      }
+      
       console.log('🤖 Initializing bot...');
       botModule = initBot();
       bot = botModule.bot;
-      botModule.startBot();
-      console.log('🤖 Bot started');
+      await botModule.startBot();
+      console.log('🤖 Bot started successfully');
       
       // Start hourly news visual generator (enabled by default for chat 6022566475)
       startHourlyNewsGenerator();
     } catch (err) {
-      console.log('Bot init error:', err.message);
+      console.log('❌ Bot init error:', err.message, err.stack);
     }
   }, 3000);
 });
