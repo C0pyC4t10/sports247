@@ -6,6 +6,14 @@ const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
+// Import brand config for logo
+let BRAND;
+try {
+  BRAND = require('../brand');
+} catch (e) {
+  BRAND = { image: { defaultLogo: null } };
+}
+
 const userChats = new Map();
 
 function mainMenu() {
@@ -16,6 +24,14 @@ function mainMenu() {
     [Markup.button.callback('🎨 Generate Post', 'generate_btn'), Markup.button.callback('🖼️ Generate Image', 'image_btn')],
     [Markup.button.callback('💬 AI Chat', 'chat_btn')],
     [Markup.button.callback('❓ Help', 'help_btn'), Markup.button.callback('🗑️ Clear Chat', 'clear_btn')]
+  ]);
+}
+
+function imageStyleMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('🎬 Cinematic', 'style_cinematic'), Markup.button.callback('🎌 Anime', 'style_anime')],
+    [Markup.button.callback('📸 Photo', 'style_photo'), Markup.button.callback('🎨 Watercolor', 'style_water')],
+    [Markup.button.callback('🌆 Cyberpunk', 'style_cyber'), Markup.button.callback('📰 With Title', 'style_visual')]
   ]);
 }
 
@@ -57,7 +73,27 @@ function initBot() {
       const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
         model: "openai/gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You are SPORTS247 AI assistant - a helpful, friendly sports expert. You help users with sports news, match analysis, predictions, and any sports-related questions. IMPORTANT: You CAN generate images using /image command and create social media posts using /generate command. When users ask 'what can you do' or 'your skills', tell them about: News (cricket, football, basketball, tennis), AI Chat, Generate Posts, Generate Images, Analyze Articles. Keep responses concise, engaging, and use emojis." },
+          { role: "system", content: `You are SPORTS247 AI Assistant - a smart, helpful sports expert.
+
+YOUR CAPABILITIES:
+1. Chat about sports (cricket, football, basketball, tennis)
+2. Generate AI images - when user mentions "image", "generate", "create picture", "draw", ALWAYS respond with:
+🎨 *Image Generation Options*
+I can create AI images in these styles:
+• Cinematic - Realistic movie-like scenes
+• Anime - Japanese cartoon style
+• Photorealistic - Ultra realistic photos
+• Watercolor - Artistic painting
+• Cyberpunk - Futuristic neon
+Examples: /image Cricket celebration /image Messi goal - anime /image Stadium - photo
+Just tell me what you want!
+3. Create social media posts with /generate command
+4. Analyze articles with /analyze command
+5. Understand images users send (describe what you see)
+6. Provide sports news and analysis
+
+When user asks "what can you do" - list ALL features above.
+Be concise, friendly, and use emojis. Remember conversation context.` },
           ...history.slice(-10),
           { role: "user", content: message }
         ]
@@ -108,20 +144,35 @@ Choose an option from the menu below:`, {
 
   bot.help(async (ctx) => {
     const chatId = ctx.from.id;
-    await sendMsg(chatId, `📋 *Available Commands:*
+    await sendMsg(chatId, `📋 *SPORTS247 Bot - All Features:*
 
-/start - Start bot & menu
-/news - Latest sports news
-/news_cricket - Cricket news
-/news_football - Football news
-/analyze <url> - AI analyze article
-/generate <text> - Generate posts
-/image <prompt> - Generate AI image (use -anime, -photo, -water, -cyber)
-/visual <title>|<prompt> - Generate image with title bar
-/help - Show commands
-/clear - Clear chat
+📰 *News*
+/news - All sports news
+/news_cricket - Cricket only
+/news_football - Football only
+/news_basketball - Basketball
+/news_tennis - Tennis
 
-💬 Or just chat with AI!`, { 
+🎨 *Image Generation*
+/image <prompt> - Generate AI image
+Styles: -anime, -photo, -water, -cyber
+Example: /image Cricket celebration -anime
+/visual <title>|<prompt> - Image with title
+
+📝 *Content*
+/generate <text> - Social media posts
+/analyze <url> - Analyze article
+
+🖼️ *Image Understanding*
+Send me a photo and I'll analyze it!
+
+💬 *AI Chat*
+Just type and chat with AI!
+Ask "what can you do" for help
+
+🔧 *Other*
+/clear - Clear chat history
+/help - Show this menu`, { 
       parse_mode: 'Markdown',
       reply_markup: mainMenu().reply_markup
     });
@@ -311,12 +362,15 @@ Choose an option from the menu below:`, {
 
 Usage: /image <prompt>
 
-Styles: cinematic, anime, photorealistic, watercolor, cyberpunk
+Styles: cinematic, anime, photorealistic, watercolor, cyberpunk, modern, dramatic, vintage, hdr, artistic
 
 Examples:
 /image Cricket stadium with crowd
 /image Messi scoring goal - anime
-/image Football stadium at sunset - photorealistic`, { parse_mode: 'Markdown' });
+/image Football stadium at sunset - photo
+/image celebration - modern
+
+Logo & Brand bar auto-added!`, { parse_mode: 'Markdown' });
     }
     
     let style = 'cinematic';
@@ -332,16 +386,35 @@ Examples:
     } else if (prompt.includes('- cyber')) {
       style = 'cyberpunk';
       prompt = prompt.replace('- cyber', '').replace('- cyberpunk', '').trim();
+    } else if (prompt.includes('- modern')) {
+      style = 'modern';
+      prompt = prompt.replace('- modern', '').trim();
+    } else if (prompt.includes('- dramatic')) {
+      style = 'dramatic';
+      prompt = prompt.replace('- dramatic', '').trim();
+    } else if (prompt.includes('- vintage')) {
+      style = 'vintage';
+      prompt = prompt.replace('- vintage', '').trim();
+    } else if (prompt.includes('- hdr')) {
+      style = 'hdr';
+      prompt = prompt.replace('- hdr', '').trim();
+    } else if (prompt.includes('- artistic')) {
+      style = 'artistic';
+      prompt = prompt.replace('- artistic', '').trim();
     }
     
-    await sendMsg(chatId, `🖼️ Generating image...\nStyle: ${style}`);
+    const brandLogo = BRAND?.image?.defaultLogo || null;
+    
+    await sendMsg(chatId, `🖼️ Generating image...\nStyle: ${style}\n📌 Logo & Brand bar auto-added!`);
     
     try {
       const response = await axios.post(`${API_BASE}/generate-visual`, { 
         prompt: prompt,
+        logo: brandLogo,
         width: 1024,
         height: 1024,
-        style: style
+        style: style,
+        titleBarColor: 'dark'
       }, { timeout: 90000 });
       
       const imageUrl = response.data.imageUrl || response.data.url;
@@ -394,12 +467,15 @@ This creates an image with title bar like the web app!`, { parse_mode: 'Markdown
       imagePrompt = parts[1].trim();
     }
     
-    await sendMsg(chatId, `🖼️ Generating visual post...\nTitle: ${title}`);
+    const brandLogo = BRAND?.image?.defaultLogo || null;
+    
+    await sendMsg(chatId, `🖼️ Generating visual post...\nTitle: ${title}\n📌 Logo & Brand bar auto-added!`);
     
     try {
       const response = await axios.post(`${API_BASE}/generate-visual`, { 
         prompt: imagePrompt,
         title: title,
+        logo: brandLogo,
         width: 1024,
         height: 1024,
         style: 'cinematic',
@@ -422,6 +498,52 @@ This creates an image with title bar like the web app!`, { parse_mode: 'Markdown
     }
   });
 
+  // Handle images/photos - free image understanding using HuggingFace BLIP
+  bot.on('photo', async (ctx) => {
+    const chatId = ctx.from.id;
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    
+    await sendMsg(chatId, '🖼️ Analyzing image...');
+    
+    try {
+      const photoFile = await bot.telegram.getFile(photo.file_id);
+      const photoUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${photoFile.file_path}`;
+      
+      // Use HuggingFace BLIP for free image understanding
+      const blipResponse = await axios.post(
+        'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base',
+        { inputs: photoUrl },
+        { headers: { 'Authorization': 'Bearer hf_demo' }, timeout: 30000 }
+      );
+      
+      const caption = blipResponse.data[0].generated_text;
+      await sendMsg(chatId, `🖼️ *Image Analysis:*\n\n${caption}\n\nWould you like me to create a post about this? Use /generate <text>`, { parse_mode: 'Markdown' });
+    } catch (error) {
+      console.log('Image analysis error:', error.message);
+      await sendMsg(chatId, `🎨 *Image Received!*
+
+I can analyze images for you. Describe what's in the image or ask me to:
+- Create a post about it: /generate <description>
+- Generate a similar image: /image <description>
+
+Want me to create something based on this image?`);
+    }
+  });
+
+  // Handle voice messages - ask user to type instead
+  bot.on('voice', async (ctx) => {
+    const chatId = ctx.from.id;
+    await sendMsg(chatId, `🎤 *Voice Message Received*
+
+Voice recognition is not available on free tier. 
+
+Please type your message instead, or:
+- Send a photo for image analysis
+- Use commands like /news, /generate, /image
+
+How can I help you today?`);
+  });
+
   bot.on('text', async (ctx) => {
     const message = ctx.message.text;
     const chatId = ctx.from.id;
@@ -439,25 +561,42 @@ This creates an image with title bar like the web app!`, { parse_mode: 'Markdown
     const isSkillsQuestion = skillsKeywords.some(keyword => lowerMsg.includes(keyword));
     
     if (isSkillsQuestion) {
-      await sendMsg(chatId, `🏆 *SPORTS247 Bot Skills:*
+      await sendMsg(chatId, `🏆 *SPORTS247 Bot - All Features:*
 
-📰 *News* - Get latest sports news (cricket, football, basketball, tennis)
-💬 *AI Chat* - Chat with AI about any sports topic  
-🎨 *Generate Post* - Create social media posts with captions & hashtags
-🖼️ *Generate Image* - Create AI images from text prompts
-📊 *Analyze* - AI analysis of article URLs
-🗑️ *Clear Chat* - Clear conversation history
+📰 *News* - Cricket, Football, Basketball, Tennis
+💬 *AI Chat* - Chat about any sports topic
+🎨 *Image Generation* - Use /image <prompt>
+   Styles: -anime, -photo, -water, -cyber
+📝 *Posts* - /generate <text> for social posts
+🖼️ *Image Understanding* - Send me a photo!
+📊 *Analyze* - /analyze <url> for article analysis
 
-*Commands:*
-/start - Start & show menu
-/news - Latest news
-/analyze <url> - Analyze article
-/generate <text> - Generate post
-/image <prompt> - Generate image
-/help - All commands`, { parse_mode: 'Markdown', reply_markup: mainMenu().reply_markup });
+*Just type to chat or use commands above!*`, { parse_mode: 'Markdown', reply_markup: mainMenu().reply_markup });
       return;
     }
     
+    // Check if user mentions image generation
+    const imageKeywords = ['generate image', 'create image', 'draw', 'make picture', 'create picture'];
+    if (imageKeywords.some(kw => lowerMsg.includes(kw))) {
+      await sendMsg(chatId, `🎨 *Image Generation*
+
+I can create AI images in these styles:
+• Cinematic - Realistic movie scenes
+• Anime - Cartoon style  
+• Photorealistic - Real photo quality
+• Watercolor - Artistic painting
+• Cyberpunk - Futuristic neon
+
+Examples:
+/image Cricket celebration
+/image Messi goal - anime
+/image Stadium sunset - photo
+
+What would you like to create?`, { parse_mode: 'Markdown' });
+      return;
+    }
+    
+    // Default: send to AI
     try {
       await bot.telegram.sendMessage(chatId, '🤔 Thinking...');
       
@@ -496,28 +635,56 @@ This creates an image with title bar like the web app!`, { parse_mode: 'Markdown
     } else if (query === 'generate_btn') {
       await sendMsg(chatId, '🎨 *Generate Social Post*\n\nDescribe what you want to post about:\n\nExample: India wins world cup\n\nOr use /generate <text>', { parse_mode: 'Markdown' });
     } else if (query === 'image_btn') {
-      await sendMsg(chatId, '🖼️ *Generate AI Image*\n\nDescribe the image you want:\n\nExample: Cricket stadium with crowd cheering\n\nOr use /image <prompt>', { parse_mode: 'Markdown' });
+      await sendMsg(chatId, '🖼️ *Generate AI Image*\n\n*Select a style:*\n\nOr type: /image <prompt>\nExample: /image Cricket celebration -anime', { 
+        parse_mode: 'Markdown',
+        reply_markup: imageStyleMenu().reply_markup
+      });
     } else if (query === 'chat_btn') {
       await sendMsg(chatId, '💬 *AI Chat*\n\nJust type your message and I\'ll respond!\n\nTry: "Who will win IPL 2024?"', { parse_mode: 'Markdown' });
     } else if (query === 'help_btn') {
-      await sendMsg(chatId, `📋 *Available Commands:*
+      await sendMsg(chatId, `📋 *SPORTS247 Bot - All Features:*
 
-/start - Start bot & menu
-/news - Latest sports news
-/news_cricket - Cricket news
-/news_football - Football news
-/analyze <url> - AI analyze article
-/generate <text> - Generate posts
-/image <prompt> - Generate AI image (use -anime, -photo, -water, -cyber)
-/visual <title>|<prompt> - Generate image with title bar
-/help - Show commands
-/clear - Clear chat
+📰 *News* - /news, /news_cricket, /news_football
+🎨 *Image* - /image <prompt> (use -anime, -photo, -water, -cyber)
+📝 *Posts* - /generate <text>
+🖼️ *Image Understanding* - Send me a photo!
+📊 *Analyze* - /analyze <url>
+💬 *Chat* - Just type to chat!
 
-💬 Or just chat with AI!`, { parse_mode: 'Markdown', reply_markup: mainMenu().reply_markup });
+Type /help for full menu`, { parse_mode: 'Markdown', reply_markup: mainMenu().reply_markup });
     } else if (query === 'clear_btn') {
       const userId = ctx.from.id;
       userChats.set(userId, []);
       await sendMsg(chatId, '✅ Chat history cleared!');
+    } else if (query.startsWith('style_')) {
+      const style = query.replace('style_', '');
+      let styleName = style;
+      let stylePrompt = '';
+      
+      if (style === 'cinematic') {
+        styleName = '🎬 Cinematic';
+        stylePrompt = 'cinematic';
+      } else if (style === 'anime') {
+        styleName = '🎌 Anime';
+        stylePrompt = 'anime';
+      } else if (style === 'photo') {
+        styleName = '📸 Photorealistic';
+        stylePrompt = 'photorealistic';
+      } else if (style === 'water') {
+        styleName = '🎨 Watercolor';
+        stylePrompt = 'watercolor';
+      } else if (style === 'cyber') {
+        styleName = '🌆 Cyberpunk';
+        stylePrompt = 'cyberpunk';
+      } else if (style === 'visual') {
+        await sendMsg(chatId, `📰 *Visual Post with Title*\n\nUsage: /visual <title> | <prompt>\n\nExample:\n/visual India Wins | Cricket celebration\n/visual Breaking News | Football match\n\nLogo & Brand bar auto-added!`, { parse_mode: 'Markdown' });
+        return;
+      }
+      
+      await sendMsg(chatId, `${styleName} selected!\n\nNow tell me what to draw:\n\nExample: Cricket stadium with crowd\n\nOr use: /image <prompt> -${style}`, { 
+        parse_mode: 'Markdown',
+        reply_markup: mainMenu().reply_markup
+      });
     }
     } catch (error) {
       console.log('Callback error:', error.message);

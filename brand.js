@@ -48,6 +48,8 @@ const BRAND = {
   
   image: {
     defaultSize: { width: 1024, height: 1024 },
+    // Default logo - SPORTS247 text logo as SVG base64
+    defaultLogo: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgNTAiPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMDAiIGhlaWdodD0iNTAiLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBjbGlwLXBhdGg9InVybCgjY2xpcDAiIj48cGF0aCBmaWxsPSIjMDBmZjg4IiBkPSJNMTAgMzBNMjAgMTBWMTBMMTAgNTBWNDBuMTBNMjAgMjBWMjBMMTAgNDBWNDBuMTVNMTAgMTBWMjBMMjAgNDBWNTBWNDBuMTUiLz48dGV4dCBmaWxsPSIjZmYiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyMCIgeD0iNTAiIHk9IjM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+U1BPUlRTMjQ3PC90ZXh0PjwvZz48L2c+PC9zdmc+',
     logoSizePercent: 0.20,
     logoMinSize: 50,
     logoMaxSize: 200,

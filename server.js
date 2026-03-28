@@ -1596,20 +1596,49 @@ app.get('/', (req, res) => {
 // Bot variables
 let botModule;
 let bot;
-let telegramWebhook;
 
 // Use http.createServer to handle telegraf route properly
 const http = require('http');
 
+// Custom handler that processes updates
+const handleTelegramUpdate = async (req, res) => {
+  try {
+    if (botModule && botModule.handleUpdate) {
+      await botModule.handleUpdate(req.body);
+    }
+    res.writeHead(200);
+    res.end('OK');
+  } catch (err) {
+    res.writeHead(200);
+    res.end('OK');
+  }
+};
+
 const server = http.createServer((req, res) => {
   // Handle telegraf webhook route
   if (req.url === '/telegraf' && req.method === 'POST') {
-    if (telegramWebhook) {
-      telegramWebhook(req, res);
-    } else {
-      res.writeHead(200);
-      res.end('Bot initializing...');
-    }
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const update = JSON.parse(body);
+        if (botModule && botModule.handleUpdate) {
+          botModule.handleUpdate(update).then(() => {
+            res.writeHead(200);
+            res.end('OK');
+          }).catch(() => {
+            res.writeHead(200);
+            res.end('OK');
+          });
+        } else {
+          res.writeHead(200);
+          res.end('Bot initializing...');
+        }
+      } catch (e) {
+        res.writeHead(200);
+        res.end('OK');
+      }
+    });
   } else {
     // Pass other requests to express
     app(req, res);
@@ -1624,10 +1653,6 @@ server.listen(PORT, () => {
       console.log('🤖 Initializing bot...');
       botModule = initBot();
       bot = botModule.bot;
-      
-      // Initialize Telegraf's webhook callback
-      telegramWebhook = Telegraf.webhookCallback(bot, 'express');
-      
       botModule.startBot();
       console.log('🤖 Bot started');
     } catch (err) {
