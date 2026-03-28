@@ -1596,9 +1596,27 @@ app.get('/', (req, res) => {
 // Bot variables
 let botModule;
 let bot;
+let telegramWebhook;
 
-// Initialize bot after server starts
-app.listen(PORT, async () => {
+// Use http.createServer to handle telegraf route properly
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+  // Handle telegraf webhook route
+  if (req.url === '/telegraf' && req.method === 'POST') {
+    if (telegramWebhook) {
+      telegramWebhook(req, res);
+    } else {
+      res.writeHead(200);
+      res.end('Bot initializing...');
+    }
+  } else {
+    // Pass other requests to express
+    app(req, res);
+  }
+});
+
+server.listen(PORT, () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
   setTimeout(() => {
@@ -1607,8 +1625,8 @@ app.listen(PORT, async () => {
       botModule = initBot();
       bot = botModule.bot;
       
-      // Use Telegraf's built-in webhook callback - handles ALL updates including callbacks
-      app.use('/telegraf', Telegraf.webhookCallback(bot, 'express'));
+      // Initialize Telegraf's webhook callback
+      telegramWebhook = Telegraf.webhookCallback(bot, 'express');
       
       botModule.startBot();
       console.log('🤖 Bot started');
