@@ -1595,37 +1595,27 @@ app.get('/', (req, res) => {
 
 // Bot variables
 let botModule;
+let bot;
 
 // Initialize bot after server starts
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
   setTimeout(() => {
     try {
       console.log('🤖 Initializing bot...');
       botModule = initBot();
+      bot = botModule.bot;
+      
+      // Use Telegraf's built-in webhook callback - handles ALL updates including callbacks
+      app.use('/telegraf', Telegraf.webhookCallback(bot, 'express'));
+      
       botModule.startBot();
       console.log('🤖 Bot started');
     } catch (err) {
       console.log('Bot init error:', err.message);
     }
   }, 3000);
-});
-
-// Simple webhook endpoint - passes all updates to bot
-app.post('/telegraf', async (req, res) => {
-  try {
-    if (botModule && botModule.handleUpdate) {
-      await botModule.handleUpdate(req.body);
-    }
-    res.send('OK');
-  } catch (err) {
-    res.send('OK');
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
 });
 
 // Global error handlers to prevent crash
