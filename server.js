@@ -1607,32 +1607,21 @@ process.once('SIGTERM', () => {
 
 const http = require('http');
 
-let botModule;
+// Initialize bot BEFORE server starts
+console.log('🤖 Initializing bot...');
+const botModule = initBot();
+bot = botModule.bot;
+startBot = botModule.startBot;
 
 const server = http.createServer(app);
 
 app.use(express.json());
 
-app.post('/telegraf', async (req, res) => {
-  try {
-    if (botModule && botModule.handleUpdate) {
-      await botModule.handleUpdate(req.body);
-    }
-    res.send('OK');
-  } catch (err) {
-    console.log('Webhook error:', err.message);
-    res.send('OK');
-  }
-});
+// Use Telegraf's built-in webhook middleware - handles ALL updates including callbacks
+app.use('/telegraf', Telegraf.webhookCallback(bot, 'express'));
 
 server.listen(PORT, async () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
-  
-  botModule = initBot();
-  bot = botModule.bot;
-  startBot = botModule.startBot;
-  handleUpdate = botModule.handleUpdate;
-  
   await startBot();
   console.log('🤖 Bot started');
 });
