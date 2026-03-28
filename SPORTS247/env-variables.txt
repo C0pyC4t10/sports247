@@ -1,0 +1,5 @@
+# Environment Variables for Sports247 Bot
+# Copy these to your Render.com Environment Variables
+
+TELEGRAM_BOT_TOKEN=8731020857:AAHX7HpMsuxoXmxUR4T5LYNQX0lg-nmpC1g
+OPENROUTER_API_KEY=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
