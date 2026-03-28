@@ -1607,23 +1607,44 @@ process.once('SIGTERM', () => {
 
 const http = require('http');
 
-// Initialize bot BEFORE server starts
-console.log('🤖 Initializing bot...');
-const botModule = initBot();
-bot = botModule.bot;
-startBot = botModule.startBot;
+let botModule;
+let bot;
+let startBot;
 
 const server = http.createServer(app);
 
 app.use(express.json());
 
-// Use Telegraf's built-in webhook middleware - handles ALL updates including callbacks
-app.use('/telegraf', Telegraf.webhookCallback(bot, 'express'));
+// Dummy bot placeholder - will be replaced when real bot initializes
+const dummyBot = {
+  use: () => dummyBot,
+  webhookCallback: (path) => (req, res) => res.send('OK'),
+  launch: async () => {},
+  telegram: { getMe: async () => ({ username: 'dummy' }) }
+};
+
+app.use('/telegraf', (req, res, next) => {
+  if (bot) {
+    Telegraf.webhookCallback(bot, 'express')(req, res, next);
+  } else {
+    res.send('Bot initializing...');
+  }
+});
 
 server.listen(PORT, async () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
-  await startBot();
-  console.log('🤖 Bot started');
+  
+  // Initialize bot AFTER server starts - environment variables now available
+  try {
+    botModule = initBot();
+    bot = botModule.bot;
+    startBot = botModule.startBot;
+    
+    await startBot();
+    console.log('🤖 Bot started');
+  } catch (err) {
+    console.log('Bot init error:', err.message);
+  }
 });
 
 // Global error handlers to prevent crash
