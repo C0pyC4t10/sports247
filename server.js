@@ -1628,15 +1628,30 @@ let startBot;
 
 app.use(express.json({ limit: '50mb' }));
 
-// Webhook endpoint
+// Webhook endpoint - GET for verification, POST for updates
+app.get('/telegraf', (req, res) => {
+  res.send('SPORTS247 Bot is running!');
+});
+
 app.post('/telegraf', async (req, res) => {
   try {
+    const update = req.body;
+    
+    // Log update type for debugging
+    if (update.callback_query) {
+      console.log('🔘 Callback received:', update.callback_query.data);
+    } else if (update.message) {
+      console.log('💬 Message received:', update.message.text);
+    } else if (update.edited_message) {
+      console.log('✏️ Edited message');
+    }
+    
     if (botModule && botModule.handleUpdate) {
-      await botModule.handleUpdate(req.body);
+      await botModule.handleUpdate(update);
     }
     res.send('OK');
   } catch (err) {
-    console.log('Webhook error:', err.message);
+    console.log('Webhook error:', err.message, err.stack);
     res.send('OK');
   }
 });
