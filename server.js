@@ -1607,44 +1607,55 @@ process.once('SIGTERM', () => {
 
 const http = require('http');
 
+const server = http.createServer((req, res) => {
+  // Add CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+  
+  app(req, res);
+});
+
 let botModule;
 let bot;
 let startBot;
 
-const server = http.createServer(app);
+app.use(express.json({ limit: '50mb' }));
 
-app.use(express.json());
-
-// Dummy bot placeholder - will be replaced when real bot initializes
-const dummyBot = {
-  use: () => dummyBot,
-  webhookCallback: (path) => (req, res) => res.send('OK'),
-  launch: async () => {},
-  telegram: { getMe: async () => ({ username: 'dummy' }) }
-};
-
-app.use('/telegraf', (req, res, next) => {
-  if (bot) {
-    Telegraf.webhookCallback(bot, 'express')(req, res, next);
-  } else {
-    res.send('Bot initializing...');
+// Webhook endpoint
+app.post('/telegraf', async (req, res) => {
+  try {
+    if (botModule && botModule.handleUpdate) {
+      await botModule.handleUpdate(req.body);
+    }
+    res.send('OK');
+  } catch (err) {
+    console.log('Webhook error:', err.message);
+    res.send('OK');
   }
 });
 
-server.listen(PORT, async () => {
+server.listen(PORT, () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
-  // Initialize bot AFTER server starts - environment variables now available
-  try {
-    botModule = initBot();
-    bot = botModule.bot;
-    startBot = botModule.startBot;
-    
-    await startBot();
-    console.log('🤖 Bot started');
-  } catch (err) {
-    console.log('Bot init error:', err.message);
-  }
+  // Initialize bot after a short delay
+  setTimeout(() => {
+    try {
+      botModule = initBot();
+      bot = botModule.bot;
+      startBot = botModule.startBot;
+      
+      startBot().then(() => console.log('🤖 Bot started')).catch(err => console.log('Bot error:', err.message));
+    } catch (err) {
+      console.log('Bot init error:', err.message);
+    }
+  }, 2000);
 });
 
 // Global error handlers to prevent crash
