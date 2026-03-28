@@ -20,14 +20,6 @@ try {
   };
 }
 
-try {
-  const botModuleImport = require('./tg-bot');
-  initBot = botModuleImport.initBot;
-  console.log('✅ Bot module loaded successfully');
-} catch (e) {
-  console.log('❌ Bot load error:', e.message);
-}
-
 let bot, startBot, handleUpdate;
 
 const app = express();
@@ -1614,7 +1606,7 @@ app.get('/', (req, res) => {
 });
 
 // Bot variables
-let botModule;
+// (botModule is declared at top)
 
 // Custom handler that processes updates
 const handleTelegramUpdate = async (req, res) => {
