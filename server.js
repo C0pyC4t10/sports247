@@ -1669,11 +1669,97 @@ server.listen(PORT, () => {
       bot = botModule.bot;
       botModule.startBot();
       console.log('🤖 Bot started');
+      
+      // Start hourly news visual generator
+      if (process.env.HOURLY_ENABLED === 'true') {
+        startHourlyNewsGenerator();
+      }
     } catch (err) {
       console.log('Bot init error:', err.message);
     }
   }, 3000);
 });
+
+// Hourly news visual generator
+async function startHourlyNewsGenerator() {
+  const intervalMs = (process.env.HOURLY_INTERVAL || 60) * 60 * 1000; // Default: 60 minutes
+  const targetChatId = process.env.HOUR_ADMIN_CHAT_ID;
+  
+  console.log(`⏰ Hourly news generator started (every ${intervalMs/60000} minutes)`);
+  
+  // Run immediately on startup, then every hour
+  setInterval(async () => {
+    if (!targetChatId || !bot) {
+      console.log('Hourly: No target chat ID or bot not ready');
+      return;
+    }
+    
+    console.log('⏰ Generating hourly news visuals...');
+    
+    try {
+      // Get news
+      const newsResponse = await axios.get('http://localhost:3000/trending', { timeout: 10000 });
+      const { byCategory } = newsResponse.data;
+      
+      // Get top cricket news
+      const cricketNews = byCategory?.cricket?.[0];
+      // Get top football news
+      const footballNews = byCategory?.football?.[0];
+      
+      if (cricketNews) {
+        try {
+          const brandLogo = BRAND?.image?.defaultLogo;
+          const cricketResp = await axios.post('http://localhost:3000/generate-visual', {
+            prompt: cricketNews.title,
+            title: '🏏 CRICKET NEWS',
+            logo: brandLogo,
+            style: 'cinematic',
+            width: 1024,
+            height: 1024
+          }, { timeout: 60000 });
+          
+          if (cricketResp.data.imageUrl) {
+            await bot.telegram.sendPhoto(targetChatId, cricketResp.data.imageUrl, {
+              caption: `🏏 *Cricket News*\n\n${cricketNews.title}\n\n📍 ${cricketNews.source}`,
+              parse_mode: 'Markdown'
+            });
+            console.log('✅ Hourly cricket news sent!');
+          }
+        } catch (err) {
+          console.log('Hourly cricket error:', err.message);
+        }
+      }
+      
+      if (footballNews) {
+        try {
+          const brandLogo = BRAND?.image?.defaultLogo;
+          const footballResp = await axios.post('http://localhost:3000/generate-visual', {
+            prompt: footballNews.title,
+            title: '⚽ FOOTBALL NEWS',
+            logo: brandLogo,
+            style: 'cinematic',
+            width: 1024,
+            height: 1024
+          }, { timeout: 60000 });
+          
+          if (footballResp.data.imageUrl) {
+            await bot.telegram.sendPhoto(targetChatId, footballResp.data.imageUrl, {
+              caption: `⚽ *Football News*\n\n${footballNews.title}\n\n📍 ${footballNews.source}`,
+              parse_mode: 'Markdown'
+            });
+            console.log('✅ Hourly football news sent!');
+          }
+        } catch (err) {
+          console.log('Hourly football error:', err.message);
+        }
+      }
+      
+    } catch (err) {
+      console.log('Hourly news fetch error:', err.message);
+    }
+    
+  }, intervalMs);
+}
 
 // Global error handlers to prevent crash
 process.on('uncaughtException', (err) => {

@@ -142,9 +142,13 @@ Be concise, friendly, and use emojis. Remember conversation context.` },
     const userId = ctx.from.id;
     userChats.set(userId, []);
     
+    console.log(`👤 User started bot: ${chatId} (${ctx.from.first_name} ${ctx.from.last_name || ''})`);
+    
     await sendMsg(chatId, `🏆 *Welcome to SPORTS247 Bot!*
 
 Your personal AI Sports Assistant
+
+Your Chat ID: \`${chatId}\`
 
 Choose an option from the menu below:`, {
       parse_mode: 'Markdown',
