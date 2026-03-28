@@ -1670,10 +1670,8 @@ server.listen(PORT, () => {
       botModule.startBot();
       console.log('🤖 Bot started');
       
-      // Start hourly news visual generator
-      if (process.env.HOURLY_ENABLED === 'true') {
-        startHourlyNewsGenerator();
-      }
+      // Start hourly news visual generator (enabled by default for chat 6022566475)
+      startHourlyNewsGenerator();
     } catch (err) {
       console.log('Bot init error:', err.message);
     }
@@ -1683,7 +1681,7 @@ server.listen(PORT, () => {
 // Hourly news visual generator
 async function startHourlyNewsGenerator() {
   const intervalMs = (process.env.HOURLY_INTERVAL || 60) * 60 * 1000; // Default: 60 minutes
-  const targetChatId = process.env.HOUR_ADMIN_CHAT_ID;
+  const targetChatId = process.env.HOUR_ADMIN_CHAT_ID || '6022566475'; // Default to user's chat ID
   
   console.log(`⏰ Hourly news generator started (every ${intervalMs/60000} minutes)`);
   

@@ -61,6 +61,7 @@ function initBot() {
     { command: 'template', description: 'AI template generator' },
     { command: 'image', description: 'Generate AI image' },
     { command: 'visual', description: 'Generate image with title' },
+    { command: 'testhourly', description: 'Test hourly news' },
     { command: 'help', description: 'Show all commands' },
     { command: 'clear', description: 'Clear chat history' }
   ];
@@ -546,50 +547,30 @@ This creates an image with title bar like the web app!`, { parse_mode: 'Markdown
     }
   });
 
-  // Handle images/photos - free image understanding using HuggingFace BLIP
-  bot.on('photo', async (ctx) => {
+  bot.command('testhourly', async (ctx) => {
     const chatId = ctx.from.id;
-    const photo = ctx.message.photo[ctx.message.photo.length - 1];
-    
-    await sendMsg(chatId, '🖼️ Analyzing image...');
+    await sendMsg(chatId, '⏰ Testing hourly news generator...');
     
     try {
-      const photoFile = await bot.telegram.getFile(photo.file_id);
-      const photoUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${photoFile.file_path}`;
+      const newsResponse = await axios.get(`${API_BASE}/trending`, { timeout: 15000 });
+      const { byCategory } = newsResponse.data;
       
-      // Use HuggingFace BLIP for free image understanding
-      const blipResponse = await axios.post(
-        'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base',
-        { inputs: photoUrl },
-        { headers: { 'Authorization': 'Bearer hf_demo' }, timeout: 30000 }
-      );
+      const cricketNews = byCategory?.cricket?.[0];
+      const footballNews = byCategory?.football?.[0];
       
-      const caption = blipResponse.data[0].generated_text;
-      await sendMsg(chatId, `🖼️ *Image Analysis:*\n\n${caption}\n\nWould you like me to create a post about this? Use /generate <text>`, { parse_mode: 'Markdown' });
+      if (cricketNews) {
+        await sendMsg(chatId, `🏏 Generating cricket visual...\n\n${cricketNews.title}`);
+      }
+      
+      if (footballNews) {
+        await sendMsg(chatId, `⚽ Generating football visual...\n\n${footballNews.title}`);
+      }
+      
+      await sendMsg(chatId, '✅ Hourly news test complete! Check your chat for images.');
     } catch (error) {
-      console.log('Image analysis error:', error.message);
-      await sendMsg(chatId, `🎨 *Image Received!*
-
-I can analyze images for you. Describe what's in the image or ask me to:
-- Create a post about it: /generate <description>
-- Generate a similar image: /image <description>
-
-Want me to create something based on this image?`);
+      console.log('Test hourly error:', error.message);
+      await sendMsg(chatId, '❌ Test failed. Check server logs.');
     }
-  });
-
-  // Handle voice messages - ask user to type instead
-  bot.on('voice', async (ctx) => {
-    const chatId = ctx.from.id;
-    await sendMsg(chatId, `🎤 *Voice Message Received*
-
-Voice recognition is not available on free tier. 
-
-Please type your message instead, or:
-- Send a photo for image analysis
-- Use commands like /news, /generate, /image
-
-How can I help you today?`);
   });
 
   bot.on('text', async (ctx) => {
