@@ -6,12 +6,17 @@ const cheerio = require('cheerio');
 const Parser = require('rss-parser');
 const { Telegraf } = require('telegraf');
 const http = require('http');
+const path = require('path');
+
 let BRAND;
 let initBot;
 let botModule;
 
+// Load brand
 try {
-  BRAND = require('./brand');
+  const brandPath = path.join(__dirname, 'brand');
+  BRAND = require(brandPath);
+  console.log('✅ Brand loaded');
 } catch (e) {
   console.log('Brand load error:', e.message);
   BRAND = { 
@@ -1627,23 +1632,35 @@ const server = http.createServer((req, res) => {
   if (req.url === '/telegraf' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const update = JSON.parse(body);
+        
+        // Try to load bot if not ready
+        if (!botModule || !botModule.handleUpdate) {
+          console.log('🔄 Loading bot for webhook...');
+          try {
+            const botPath = path.join(__dirname, 'tg-bot');
+            const botModuleImport = require(botPath);
+            initBot = botModuleImport.initBot;
+            botModule = initBot();
+            console.log('✅ Bot loaded via webhook');
+          } catch (e) {
+            console.log('❌ Bot load failed:', e.message);
+          }
+        }
+        
         if (botModule && botModule.handleUpdate) {
-          botModule.handleUpdate(update).then(() => {
-            res.writeHead(200);
-            res.end('OK');
-          }).catch(() => {
-            res.writeHead(200);
-            res.end('OK');
-          });
+          await botModule.handleUpdate(update);
+          res.writeHead(200);
+          res.end('OK');
         } else {
-          console.log('Webhook called but botModule not ready');
+          console.log('⏳ Bot not ready');
           res.writeHead(200);
           res.end('Bot initializing...');
         }
       } catch (e) {
+        console.log('Webhook error:', e.message);
         res.writeHead(200);
         res.end('OK');
       }
@@ -1660,9 +1677,11 @@ server.listen(PORT, () => {
   setTimeout(async () => {
     try {
       if (!initBot) {
-        console.log('❌ initBot not found, retrying...');
-        const botModuleImport = require('./tg-bot');
+        console.log('🔄 Loading bot module...');
+        const botPath = path.join(__dirname, 'tg-bot');
+        const botModuleImport = require(botPath);
         initBot = botModuleImport.initBot;
+        console.log('✅ Bot module loaded');
       }
       
       console.log('🤖 Initializing bot...');
