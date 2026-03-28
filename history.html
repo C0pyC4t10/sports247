@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - Sports AI Bot</title>
+    <style>
+        body { background-color: #1a1a2e; color: white; font-family: Arial, sans-serif; padding: 20px; margin: 0; }
+        nav { background: #0f3460; padding: 15px; margin-bottom: 20px; text-align: center; }
+        nav a { color: #00ff88; text-decoration: none; margin: 0 15px; font-size: 18px; }
+        nav a:hover { color: white; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .history-item { background: #0f3460; padding: 15px; margin-bottom: 15px; border-radius: 8px; text-align: left; }
+        .history-item h3 { margin: 0 0 10px 0; color: #00ff88; font-size: 14px; }
+        .history-item p { margin: 5px 0; }
+        .original { color: #aaa; font-size: 14px; }
+        .result { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1a1a2e; }
+        .clear-btn { background: #ff4757; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="/">Home</a>
+        <a href="/history.html">History</a>
+        <a href="/about.html">About</a>
+    </nav>
+
+    <div class="container">
+        <h1>Analysis History 📜</h1>
+        <button class="clear-btn" onclick="clearHistory()">Clear History</button>
+        <div id="historyContainer"></div>
+    </div>
+
+    <script>
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('sportsHistory') || '[]');
+            const container = document.getElementById('historyContainer');
+            
+            if (history.length === 0) {
+                container.innerHTML = '<p style="text-align:center">কোনো হিস্টোরি নেই!</p>';
+                return;
+            }
+
+            container.innerHTML = history.map(item => `
+                <div class="history-item">
+                    <h3>${item.date}</h3>
+                    <p class="original"><strong>Original:</strong> ${item.text.substring(0, 100)}${item.text.length > 100 ? '...' : ''}</p>
+                    <div class="result"><strong>Result:</strong><br>${item.result.replace(/\n/g, '<br>')}</div>
+                </div>
+            `).join('');
+        }
+
+        function clearHistory() {
+            if (confirm('সব হিস্টোরি মুছে ফেলতে চান?')) {
+                localStorage.removeItem('sportsHistory');
+                loadHistory();
+            }
+        }
+
+        loadHistory();
+    </script>
+</body>
+</html>

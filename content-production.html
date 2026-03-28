@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Production - Sports AI Bot</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', Arial, sans-serif; }
+        
+        nav { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        nav .logo { font-size: 24px; font-weight: bold; color: #58a6ff; }
+        nav .logo span { color: #00ff88; }
+        nav a { color: #c9d1d9; text-decoration: none; margin-left: 25px; font-size: 15px; transition: color 0.3s; }
+        nav a:hover { color: #00ff88; }
+        
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        
+        .hero { background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%); padding: 40px; border-radius: 15px; margin-bottom: 30px; text-align: center; }
+        .hero h1 { font-size: 36px; margin-bottom: 10px; color: white; }
+        .hero p { font-size: 16px; color: #8b949e; }
+        
+        .analyze-box { background: #161b22; padding: 30px; border-radius: 12px; margin-bottom: 30px; border: 1px solid #30363d; }
+        .tab-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-buttons button { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.3s; }
+        .tab-buttons button.active { background: #00ff88; color: #0d1117; }
+        .tab-buttons button:not(.active) { background: #21262d; color: #c9d1d9; }
+        
+        .input-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        .input-group textarea, .input-group input { flex: 1; min-width: 300px; padding: 15px; border-radius: 8px; background: #0d1117; color: white; border: 1px solid #30363d; font-size: 15px; }
+        .input-group textarea { height: 100px; resize: none; }
+        .input-group button { padding: 15px 30px; background: #00ff88; color: #0d1117; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+        .input-group button:hover { background: #00cc6a; transform: translateY(-2px); }
+        
+        .result-box { margin-top: 20px; padding: 20px; background: #1a1a2e; border-radius: 10px; display: none; border-left: 4px solid #00ff88; }
+        .result-box.show { display: block; }
+        
+        .loading { text-align: center; padding: 40px; color: #8b949e; }
+        .loading::after { content: ''; animation: dots 1.5s infinite; }
+        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .supported-sites { margin-top: 15px; font-size: 13px; color: #8b949e; }
+        
+        .action-buttons { display: flex; gap: 10px; margin-top: 15px; }
+        .action-buttons button { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .generate-visual-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .generate-visual-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); }
+        
+        .social-preview { margin-top: 20px; background: linear-gradient(135deg, #1a1a2e 0%, #2d1f4e 100%); border-radius: 12px; padding: 20px; border: 1px solid #667eea; }
+        .social-preview h3 { color: #fff; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .fb-caption-box { background: #fff; color: #1c1e21; padding: 15px; border-radius: 8px; font-size: 15px; line-height: 1.5; margin-bottom: 15px; }
+        .hashtags { color: #1877f2; font-size: 14px; margin-bottom: 15px; }
+        .image-prompt-box { background: #0d1117; color: #c9d1d9; padding: 12px; border-radius: 8px; font-size: 13px; font-family: monospace; max-height: 80px; overflow-y: auto; }
+        .copy-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-right: 8px; }
+        .copy-btn:hover { background: #30363d; }
+        
+        .image-upload-box { margin-top: 15px; padding: 15px; background: #1a1a2e; border-radius: 8px; border: 2px dashed #30363d; }
+        .image-upload-box:hover { border-color: #667eea; }
+        .image-upload-box input[type="file"] { display: none; }
+        .upload-label { display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; color: #8b949e; font-size: 14px; }
+        .upload-label:hover { color: #667eea; }
+        .preview-thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; margin-top: 10px; }
+        .generated-image { width: 100%; max-width: 500px; border-radius: 10px; margin-top: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
+        .generate-image-btn { background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%); color: white; }
+        .generate-image-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(255, 107, 107, 0.4); }
+        
+        .size-selection { margin-top: 20px; padding: 20px; background: #1a1a2e; border-radius: 10px; border: 1px solid #30363d; }
+        .size-selection h4 { color: #fff; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .size-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+        .size-option { padding: 12px; background: #0d1117; border: 2px solid #30363d; border-radius: 8px; cursor: pointer; transition: all 0.3s; }
+        .size-option:hover { border-color: #58a6ff; }
+        .size-option.selected { border-color: #00ff88; background: rgba(0, 255, 136, 0.1); }
+        .size-option .dimensions { color: #00ff88; font-weight: bold; font-size: 14px; }
+        .size-option .platform { color: #8b949e; font-size: 12px; margin-top: 4px; }
+        
+        .style-selection { margin-top: 20px; padding: 20px; background: #1a1a2e; border-radius: 10px; border: 1px solid #30363d; }
+        .style-selection h4 { color: #fff; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .style-option { padding: 12px; background: #0d1117; border: 2px solid #30363d; border-radius: 8px; cursor: pointer; transition: all 0.3s; text-align: center; }
+        .style-option:hover { border-color: #58a6ff; }
+        .style-option.selected { border-color: #00ff88; background: rgba(0, 255, 136, 0.1); }
+        .style-option .style-name { color: #fff; font-weight: bold; font-size: 14px; }
+        .style-option .style-desc { color: #8b949e; font-size: 11px; margin-top: 4px; }
+        
+        .logo-position-option { padding: 8px 12px; background: #0d1117; border: 2px solid #30363d; border-radius: 6px; cursor: pointer; color: #c9d1d9; font-size: 12px; transition: all 0.3s; }
+        .logo-position-option:hover { border-color: #58a6ff; }
+        .logo-position-option.selected { border-color: #00ff88; background: rgba(0, 255, 136, 0.1); }
+        
+        .image-fullscreen-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .image-fullscreen-modal.show { display: flex; }
+        .image-fullscreen-content {
+            max-width: 500px !important;
+            max-height: 500px !important;
+            position: relative;
+        }
+        .image-fullscreen-content img {
+            width: 500px !important;
+            height: auto !important;
+            max-width: 500px !important;
+            max-height: 500px !important;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+        .image-fullscreen-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #30363d;
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 2001;
+        }
+        .image-fullscreen-close:hover { background: #484f58; }
+        .image-fullscreen-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .image-fullscreen-actions button, .image-fullscreen-actions a {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .download-btn { background: #00ff88; color: #0d1117; }
+        .download-btn:hover { background: #00cc6a; }
+        .fullscreen-btn { background: #58a6ff; color: white; }
+        .fullscreen-btn:hover { background: #4393e6; }
+        
+        footer { text-align: center; padding: 30px; color: #8b949e; font-size: 14px; border-top: 1px solid #30363d; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="logo">Sports<span>AI</span> Bot</div>
+        <div>
+            <a href="/">Home</a>
+            <a href="/content-production.html">Content Production</a>
+            <a href="/history.html">History</a>
+            <a href="/about.html">About</a>
+        </div>
+    </nav>
+
+    <div class="image-fullscreen-modal" id="imageFullscreenModal" onclick="closeImageFullscreen()">
+        <button class="image-fullscreen-close" onclick="closeImageFullscreen()">&times;</button>
+        <div class="image-fullscreen-content" onclick="event.stopPropagation()">
+            <img id="fullscreenImage" src="" alt="Full Screen Image">
+        </div>
+        <div class="image-fullscreen-actions" onclick="event.stopPropagation()">
+            <button class="download-btn" onclick="downloadImage()">📥 Download Image</button>
+            <a id="fullscreenOpenBtn" href="#" target="_blank" class="fullscreen-btn">🔗 Open in New Tab</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="hero">
+            <h1>🎬 Content Production</h1>
+            <p>Create viral social media posts from sports news - AI powered Bengali content</p>
+        </div>
+
+        <div class="analyze-box">
+            <div class="tab-buttons">
+                <button id="tabText" class="active" onclick="switchTab('text')">📝 Paste Text</button>
+                <button id="tabUrl" onclick="switchTab('url')">🔗 From URL</button>
+            </div>
+
+            <div id="textTab" class="tab-content active">
+                <div class="input-group">
+                    <textarea id="newsInput" placeholder="Paste your sports news here..."></textarea>
+                    <button onclick="analyzeText()">🤖 Analyze</button>
+                </div>
+            </div>
+
+            <div id="urlTab" class="tab-content">
+                <div class="input-group">
+                    <input type="url" id="urlInput" placeholder="Paste news URL from supported sites..." />
+                    <button onclick="fetchAndAnalyze()">🔍 Fetch & Analyze</button>
+                </div>
+                <div class="supported-sites">Supported: BBC Sport, ESPN, Sky Sports, Cricbuzz, Goal.com, Sportskeeda, ICC, FIFA</div>
+            </div>
+
+            <div id="resultBox" class="result-box"></div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Sports AI Bot © 2025 | Powered by OpenRouter AI</p>
+    </footer>
+
+    <script>
+        let currentArticleText = '';
+        let uploadedImage = null;
+        let selectedStyle = 'cinematic';
+        let selectedLogoPosition = 'top-right';
+        
+        function switchTab(tab) {
+            document.getElementById('tabText').className = tab === 'text' ? 'active' : '';
+            document.getElementById('tabUrl').className = tab === 'url' ? 'active' : '';
+            document.getElementById('textTab').className = tab === 'text' ? 'tab-content active' : 'tab-content';
+            document.getElementById('urlTab').className = tab === 'url' ? 'tab-content active' : 'tab-content';
+            document.getElementById('resultBox').classList.remove('show');
+        }
+
+        async function analyzeText() {
+            const inputText = document.getElementById('newsInput').value;
+            const resultBox = document.getElementById('resultBox');
+            const btn = document.querySelector('#textTab button');
+
+            if (!inputText) return alert('Please paste some news text!');
+
+            btn.innerText = 'Analyzing...';
+            btn.disabled = true;
+            resultBox.classList.add('show');
+            resultBox.innerHTML = '<div class="loading">🤖 AI is analyzing... (10-15 seconds)</div>';
+            currentArticleText = inputText;
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: inputText })
+                });
+
+                const data = await response.json();
+                const actionButtons = `
+                    <div class="action-buttons">
+                        <button class="generate-visual-btn" onclick="generateFBVisual()">🎨 Generate Posts and Visuals</button>
+                        <button class="copy-btn" onclick="copyFullNews()">📋 Copy News</button>
+                    </div>
+                `;
+                
+                resultBox.innerHTML = (data.result ? data.result.replace(/\n/g, '<br>') : 'Error: ' + (data.error || 'Unknown error')) + actionButtons;
+            } catch (error) {
+                resultBox.innerHTML = '❌ Error occurred. Try again.';
+            }
+
+            btn.innerText = '🤖 Analyze';
+            btn.disabled = false;
+        }
+
+        async function fetchAndAnalyze() {
+            const url = document.getElementById('urlInput').value;
+            const resultBox = document.getElementById('resultBox');
+            const btn = document.querySelector('#urlTab button');
+
+            if (!url) return alert('Please enter a URL!');
+
+            btn.innerText = 'Fetching...';
+            btn.disabled = true;
+            resultBox.classList.add('show');
+            resultBox.innerHTML = '<div class="loading">📥 Fetching article... <br><small>(scraping website content)</small></div>';
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+                if (data.result) {
+                    currentArticleText = data.result;
+                }
+                const actionButtons = `
+                    <div class="action-buttons">
+                        <button class="generate-visual-btn" onclick="generateFBVisual()">🎨 Generate Posts and Visuals</button>
+                        <button class="copy-btn" onclick="copyFullNews()">📋 Copy News</button>
+                    </div>
+                `;
+                
+                resultBox.innerHTML = data.error ? '❌ ' + data.error : (data.result ? data.result.replace(/\n/g, '<br>') + actionButtons : 'Error');
+            } catch (error) {
+                resultBox.innerHTML = '❌ Error occurred. Try again.';
+            }
+
+            btn.innerText = '🔍 Fetch & Analyze';
+            btn.disabled = false;
+        }
+
+        function handleImageUpload(event) {
+            const files = event.target.files;
+            uploadedImages = [];
+            const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = '';
+            
+            Array.from(files).forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    uploadedImages.push(e.target.result);
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.style.width = '60px';
+                    img.style.height = '60px';
+                    img.style.objectFit = 'cover';
+                    img.style.borderRadius = '6px';
+                    container.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function handleLogoUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    uploadedLogo = e.target.result;
+                    const container = document.getElementById('logoPreviewContainer');
+                    container.innerHTML = '';
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.style.width = '60px';
+                    img.style.height = '60px';
+                    img.style.objectFit = 'contain';
+                    img.style.borderRadius = '6px';
+                    img.style.border = '2px solid #00ff88';
+                    container.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function generateFBVisual() {
+            if (!currentArticleText) return alert('No article text available!');
+            
+            const resultBox = document.getElementById('resultBox');
+            resultBox.innerHTML += '<div class="loading" id="visualLoading">🎨 Generating 3 social posts...<br><small>(creating captions & image prompts)</small></div>';
+
+            try {
+                const response = await fetch('/generate-fb-visual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ articleText: currentArticleText })
+                });
+
+                const data = await response.json();
+                document.getElementById('visualLoading')?.remove();
+
+                if (data.posts && data.posts.length > 0) {
+                    allPrompts = data.posts.map(p => p.imagePrompt);
+                    let socialPreview = '<div class="social-preview"><h3>📱 Posts and Visuals</h3>';
+                    
+                    const typeColors = { 'Emotional': '#e74c3c', 'Controversial': '#f39c12', 'Informative': '#3498db' };
+                    
+                    data.posts.forEach((post, index) => {
+                        const color = typeColors[post.type] || '#667eea';
+                        socialPreview += `
+                            <div style="background: #1a1a2e; border-radius: 10px; padding: 15px; margin-bottom: 15px; border-left: 4px solid ${color};">
+                                <div style="color: ${color}; font-weight: bold; margin-bottom: 10px; font-size: 14px;">${post.type}</div>
+                                <div class="fb-caption-box">${post.fbCaption}</div>
+                                <div class="hashtags">${post.hashtags.join(' ')}</div>
+                                <div style="margin-bottom: 10px;">
+                                    <button class="copy-btn" onclick="copyToClipboard('${(post.fbCaption || '').replace(/'/g, "\\'")}')">Copy Caption</button>
+                                    <button class="copy-btn" onclick="copyToClipboard('${post.hashtags.join(' ')}')">Copy Hashtags</button>
+                                    <button class="copy-btn" onclick="copyToClipboard('${(post.imagePrompt || '').replace(/'/g, "\\'")}')">Copy Prompt</button>
+                                </div>
+                                <div style="color: #8b949e; font-size: 12px; margin-bottom: 5px;">AI Image Prompt:</div>
+                                <div class="image-prompt-box">${post.imagePrompt}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    socialPreview += `
+                        <div style="margin-top: 20px; padding: 20px; background: #1a1a2e; border-radius: 10px;">
+                            <h4 style="color: #fff; margin-bottom: 15px;">🖼️ Generate Image</h4>
+                            
+                            <div class="style-selection">
+                                <h4>🎨 Select Style</h4>
+                                <div class="style-grid">
+                                    <div class="style-option selected" data-style="cinematic" onclick="selectStyle(this)">
+                                        <div class="style-name">Cinematic</div>
+                                        <div class="style-desc">cinematic lighting...</div>
+                                    </div>
+                                    <div class="style-option" data-style="dramatic" onclick="selectStyle(this)">
+                                        <div class="style-name">Dramatic</div>
+                                        <div class="style-desc">high contrast...</div>
+                                    </div>
+                                    <div class="style-option" data-style="vintage" onclick="selectStyle(this)">
+                                        <div class="style-name">Vintage</div>
+                                        <div class="style-desc">retro colors...</div>
+                                    </div>
+                                    <div class="style-option" data-style="modern" onclick="selectStyle(this)">
+                                        <div class="style-name">Modern</div>
+                                        <div class="style-desc">clean lines...</div>
+                                    </div>
+                                    <div class="style-option" data-style="hdr" onclick="selectStyle(this)">
+                                        <div class="style-name">HDR</div>
+                                        <div class="style-desc">high dynamic range...</div>
+                                    </div>
+                                    <div class="style-option" data-style="realistic" onclick="selectStyle(this)">
+                                        <div class="style-name">Realistic</div>
+                                        <div class="style-desc">photorealistic...</div>
+                                    </div>
+                                    <div class="style-option" data-style="artistic" onclick="selectStyle(this)">
+                                        <div class="style-name">Artistic</div>
+                                        <div class="style-desc">artistic style...</div>
+                                    </div>
+                                    <div class="style-option" data-style="watercolor" onclick="selectStyle(this)">
+                                        <div class="style-name">Watercolor</div>
+                                        <div class="style-desc">soft watercolor...</div>
+                                    </div>
+                                    <div class="style-option" data-style="pixel-art" onclick="selectStyle(this)">
+                                        <div class="style-name">Pixel Art</div>
+                                        <div class="style-desc">pixel art style...</div>
+                                    </div>
+                                    <div class="style-option" data-style="neon" onclick="selectStyle(this)">
+                                        <div class="style-name">Neon</div>
+                                        <div class="style-desc">vibrant neon...</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="size-selection">
+                                <h4>📐 Select Image Size</h4>
+                                <div class="size-grid">
+                                    <div class="size-option selected" data-preset="instagram-square" onclick="selectSize(this)">
+                                        <div class="dimensions">1080×1080</div>
+                                        <div class="platform">Instagram Post</div>
+                                    </div>
+                                    <div class="size-option" data-preset="instagram-story" onclick="selectSize(this)">
+                                        <div class="dimensions">1080×1920</div>
+                                        <div class="platform">Instagram Story</div>
+                                    </div>
+                                    <div class="size-option" data-preset="facebook-post" onclick="selectSize(this)">
+                                        <div class="dimensions">1200×630</div>
+                                        <div class="platform">Facebook Post</div>
+                                    </div>
+                                    <div class="size-option" data-preset="facebook-cover" onclick="selectSize(this)">
+                                        <div class="dimensions">820×312</div>
+                                        <div class="platform">Facebook Cover</div>
+                                    </div>
+                                    <div class="size-option" data-preset="twitter-post" onclick="selectSize(this)">
+                                        <div class="dimensions">1600×900</div>
+                                        <div class="platform">Twitter/X Post</div>
+                                    </div>
+                                    <div class="size-option" data-preset="twitter-header" onclick="selectSize(this)">
+                                        <div class="dimensions">1500×500</div>
+                                        <div class="platform">Twitter/X Header</div>
+                                    </div>
+                                    <div class="size-option" data-preset="youtube-thumbnail" onclick="selectSize(this)">
+                                        <div class="dimensions">1280×720</div>
+                                        <div class="platform">YouTube Thumbnail</div>
+                                    </div>
+                                    <div class="size-option" data-preset="linkedin-post" onclick="selectSize(this)">
+                                        <div class="dimensions">1200×627</div>
+                                        <div class="platform">LinkedIn Post</div>
+                                    </div>
+                                    <div class="size-option" data-preset="pinterest-pin" onclick="selectSize(this)">
+                                        <div class="dimensions">1000×1500</div>
+                                        <div class="platform">Pinterest Pin</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom: 15px; margin-top: 15px;">
+                                <label style="color: #8b949e; font-size: 13px; display: block; margin-bottom: 8px;">Or enter custom prompt:</label>
+                                <textarea id="customPromptInput" style="width: 100%; padding: 12px; border-radius: 8px; background: #0d1117; color: white; border: 1px solid #30363d; font-size: 14px; resize: none; height: 60px;" placeholder="Enter your own prompt for image generation..."></textarea>
+                            </div>
+                             <div style="margin-bottom: 15px;">
+                                 <label style="color: #8b949e; font-size: 13px; display: block; margin-bottom: 8px;">Or enter custom prompt:</label>
+                                 <textarea id="customPromptInput" style="width: 100%; padding: 12px; border-radius: 8px; background: #0d1117; color: white; border: 1px solid #30363d; font-size: 14px; resize: none; height: 60px;" placeholder="Enter your own prompt for image generation..."></textarea>
+                             </div>
+                             <div style="margin-bottom: 15px;">
+                                 <label style="color: #8b949e; font-size: 13px; display: block; margin-bottom: 8px;">📝 Title for Image (will appear on generated image):</label>
+                                 <input type="text" id="titleInput" style="width: 100%; padding: 12px; border-radius: 8px; background: #0d1117; color: white; border: 1px solid #30363d; font-size: 16px;" placeholder="Enter title text for the generated image...">
+                             </div>
+                            </div>
+                            <div style="margin-bottom: 15px; margin-top: 15px;">
+                                <label style="color: #8b949e; font-size: 13px; display: block; margin-bottom: 8px;">📍 Logo Position:</label>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                    <div class="logo-position-option" data-position="top-left" onclick="selectLogoPosition('top-left')">Top Left</div>
+                                    <div class="logo-position-option selected" data-position="top-right" onclick="selectLogoPosition('top-right')">Top Right</div>
+                                    <div class="logo-position-option" data-position="bottom-left" onclick="selectLogoPosition('bottom-left')">Bottom Left</div>
+                                    <div class="logo-position-option" data-position="bottom-right" onclick="selectLogoPosition('bottom-right')">Bottom Right</div>
+                                </div>
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="color: #8b949e; font-size: 13px; display: block; margin-bottom: 8px;">📎 Reference Images (optional, multiple allowed):</label>
+                                <div class="image-upload-box">
+                                    <label class="upload-label" for="imageInput">
+                                        <span>📎 Upload Reference Images</span>
+                                    </label>
+                                    <input type="file" id="imageInput" accept="image/*" multiple onchange="handleImageUpload(event)">
+                                    <div id="imagePreviewContainer" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;"></div>
+                                </div>
+                            </div>
+                            <button class="generate-image-btn" style="padding: 15px; width: 100%; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;" onclick="generateImageFromAllPosts()">🎨 Generate Image</button>
+                        </div>
+                    `;
+                    
+                    socialPreview += '</div>';
+                    resultBox.innerHTML += socialPreview;
+                } else {
+                    resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ ' + (data.error || 'Failed to generate') + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('imageLoading')?.remove();
+                console.error('Image generation error:', error);
+                resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ Error: ' + error.message + '</div>';
+            }
+        }
+
+        let allPrompts = [];
+        let uploadedImages = [];
+        let uploadedLogo = null;
+
+        async function generateImageFromAllPosts() {
+            const customPrompt = document.getElementById('customPromptInput')?.value?.trim();
+            const promptToUse = customPrompt || (allPrompts.length > 0 ? allPrompts[0] : '');
+            
+            if (!promptToUse) return alert('No prompt available!');
+            
+            const customTitle = document.getElementById('titleInput')?.value?.trim() || '';
+            
+            const resultBox = document.getElementById('resultBox');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.id = 'imageLoading';
+            loadingDiv.innerHTML = '🖼️ Generating images...<br><small>(this may take 20-30 seconds)</small>';
+            resultBox.appendChild(loadingDiv);
+
+            const imageFile = uploadedImages.length > 0 ? uploadedImages[0] : null;
+            
+            // Get selected size
+            const selectedSize = document.querySelector('.size-option.selected');
+            const sizePreset = selectedSize ? selectedSize.dataset.preset : 'instagram-square';
+
+            try {
+                const response = await fetch('/generate-visual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        prompt: promptToUse,
+                        title: customTitle,
+                        imageFile: imageFile,
+                        logo: uploadedLogo,
+                        sizePreset: sizePreset,
+                        style: selectedStyle,
+                        logoPosition: selectedLogoPosition
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById('imageLoading')?.remove();
+
+                if (data.error) {
+                    resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ ' + data.error + '</div>';
+                    return;
+                }
+
+                if (data.imageUrl) {
+                    const logoHtml = data.logo ? `<img src="${data.logo}" style="position: absolute; top: 10px; right: 10px; width: 80px; height: 80px; object-fit: contain; z-index: 10;" alt="Logo">` : '';
+                    const sizeInfo = data.size ? ` • ${data.size.width}×${data.size.height}` : '';
+                    const imgContainer = document.createElement('div');
+                    imgContainer.id = 'generatedImageContainer';
+                    imgContainer.innerHTML = `
+                        <div style="margin-top: 20px; padding: 15px; background: #1a1a2e; border-radius: 10px; position: relative;">
+                            <h4 style="color: #fff; margin-bottom: 10px;">🖼️ Generated Image (${data.mode === 'img2img' ? 'Image-to-Image' : 'Text-to-Image'})${sizeInfo}</h4>
+                            <div style="text-align: center; padding: 20px;">
+                                <div class="loading">Generating image...</div>
+                                <p style="color: #8b949e; font-size: 13px; margin-top: 10px;">Please wait 20-30 seconds</p>
+                            </div>
+                            <div style="position: relative; display: inline-block;">
+                                <img src="${data.imageUrl}" class="generated-image" alt="Generated Image" style="margin-top: 10px;" onload="this.parentElement.previousElementSibling.style.display='none'" onerror="setTimeout(() => { this.src = '${data.imageUrl}&t=' + Date.now(); }, 3000);"/>
+                                ${logoHtml}
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <button class="copy-btn" onclick="copyToClipboard('${data.imageUrl}')">Copy Image URL</button>
+                                <a href="${data.imageUrl}" target="_blank" class="copy-btn" style="text-decoration: none;">Open in New Tab</a>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Retry loading image after delay
+                    setTimeout(() => {
+                        const img = imgContainer.querySelector('img');
+                        if (img && img.parentElement.previousElementSibling.style.display !== 'none') {
+                            img.src = data.imageUrl + '&t=' + Date.now();
+                        }
+                    }, 15000);
+                        </div>
+                    `;
+                    const existingContainer = document.getElementById('generatedImageContainer');
+                    if (existingContainer) existingContainer.remove();
+                    resultBox.appendChild(imgContainer);
+                } else {
+                    resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ ' + (data.error || 'Failed to generate image') + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('imageLoading')?.remove();
+                resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ Error occurred. Try again.</div>';
+            }
+        }
+
+        async function generateImage(prompt) {
+            const resultBox = document.getElementById('resultBox');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.id = 'imageLoading';
+            loadingDiv.innerHTML = '🖼️ Generating image...<br><small>(this may take 10-20 seconds)</small>';
+            resultBox.appendChild(loadingDiv);
+
+            // Get selected size
+            const selectedSize = document.querySelector('.size-option.selected');
+            const sizePreset = selectedSize ? selectedSize.dataset.preset : 'instagram-square';
+
+            try {
+                const response = await fetch('/generate-visual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        prompt: prompt,
+                        imageFile: uploadedImage,
+                        logo: uploadedLogo,
+                        sizePreset: sizePreset,
+                        style: selectedStyle,
+                        logoPosition: selectedLogoPosition
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById('imageLoading')?.remove();
+
+                if (data.imageUrl) {
+                    const imgContainer = document.createElement('div');
+                    imgContainer.id = 'generatedImageContainer';
+                    const sizeInfo = data.size ? ` • ${data.size.width}×${data.size.height}` : '';
+                    imgContainer.innerHTML = `
+                        <div style="margin-top: 20px; padding: 15px; background: #1a1a2e; border-radius: 10px;">
+                            <h4 style="color: #fff; margin-bottom: 10px;">🖼️ Generated Image (${data.mode === 'img2img' ? 'Image-to-Image' : 'Text-to-Image'})${sizeInfo}</h4>
+                            <div style="text-align: center; padding: 20px;">
+                                <div class="loading">Generating image...</div>
+                                <p style="color: #8b949e; font-size: 13px; margin-top: 10px;">Please wait 20-30 seconds</p>
+                            </div>
+                            <img src="${data.imageUrl}" class="generated-image" alt="Generated Image" style="margin-top: 10px; cursor: pointer;" onclick="openImageFullscreen('${data.imageUrl}')" onload="this.previousElementSibling.style.display='none'" onerror="setTimeout(() => { this.src = '${data.imageUrl}&t=' + Date.now(); }, 3000);"/>
+                            <div style="margin-top: 10px;">
+                                <button class="copy-btn" onclick="copyToClipboard('${data.imageUrl}')">Copy Image URL</button>
+                                <a href="${data.imageUrl}" target="_blank" class="copy-btn" style="text-decoration: none;">Open in New Tab</a>
+                                <button class="fullscreen-btn" onclick="openImageFullscreen('${data.imageUrl}')" style="margin-left: 8px;">⛶ Full Screen</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Retry loading image after delay
+                    setTimeout(() => {
+                        const img = imgContainer.querySelector('img');
+                        if (img && img.previousElementSibling.style.display !== 'none') {
+                            img.src = data.imageUrl + '&t=' + Date.now();
+                        }
+                    }, 15000);
+                    const existingContainer = document.getElementById('generatedImageContainer');
+                    if (existingContainer) existingContainer.remove();
+                    resultBox.appendChild(imgContainer);
+                } else {
+                    resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ ' + (data.error || 'Failed to generate image') + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('imageLoading')?.remove();
+                resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ Error occurred. Try again.</div>';
+            }
+        }
+
+        function selectSize(element) {
+            document.querySelectorAll('.size-option').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+        }
+
+        function selectStyle(element) {
+            document.querySelectorAll('.style-option').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+            selectedStyle = element.dataset.style;
+        }
+
+        function selectLogoPosition(position) {
+            selectedLogoPosition = position;
+            document.querySelectorAll('.logo-position-option').forEach(el => el.classList.remove('selected'));
+            document.querySelector(`.logo-position-option[data-position="${position}"]`).classList.add('selected');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            }).catch(() => {
+                alert('Failed to copy');
+            });
+        }
+
+        function copyFullNews() {
+            if (!currentArticleText) return alert('No news to copy!');
+            navigator.clipboard.writeText(currentArticleText).then(() => {
+                alert('Full news copied to clipboard!');
+            }).catch(() => {
+                alert('Failed to copy');
+            });
+        }
+
+        let currentFullscreenImageUrl = '';
+        
+        function openImageFullscreen(url) {
+            currentFullscreenImageUrl = url;
+            const modal = document.getElementById('imageFullscreenModal');
+            const img = document.getElementById('fullscreenImage');
+            const openBtn = document.getElementById('fullscreenOpenBtn');
+            img.src = url;
+            openBtn.href = url;
+            modal.classList.add('show');
+        }
+        
+        function closeImageFullscreen() {
+            const modal = document.getElementById('imageFullscreenModal');
+            modal.classList.remove('show');
+        }
+        
+        function downloadImage() {
+            if (!currentFullscreenImageUrl) return;
+            const link = document.createElement('a');
+            link.href = currentFullscreenImageUrl;
+            link.download = 'sports247-generated-image.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeImageFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>
