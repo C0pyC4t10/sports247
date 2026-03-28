@@ -1607,21 +1607,14 @@ process.once('SIGTERM', () => {
 });
 
 let botModule;
+let bot;
 
-// Webhook endpoint - must be before app.listen
-app.post('/telegraf', async (req, res) => {
-  try {
-    const update = req.body;
-    console.log('Update received:', JSON.stringify(update).substring(0, 100));
-    
-    if (botModule && botModule.handleUpdate) {
-      await botModule.handleUpdate(update);
-    }
-    res.send('OK');
-  } catch (err) {
-    console.log('Webhook error:', err.message);
-    res.send('OK');
+// Use Telegraf's native webhook callback - handles ALL updates including callback queries
+app.use('/telegraf', (req, res, next) => {
+  if (!bot) {
+    return res.send('Bot initializing...');
   }
+  Telegraf.webhookCallback(bot, 'express')(req, res, next);
 });
 
 app.listen(PORT, () => {
