@@ -5,6 +5,7 @@ const cors = require('cors');
 const cheerio = require('cheerio');
 const Parser = require('rss-parser');
 const { Telegraf } = require('telegraf');
+const http = require('http');
 const BRAND = require('./brand');
 const { initBot } = require('./index');
 let bot, startBot, handleUpdate;
@@ -1605,72 +1606,37 @@ process.once('SIGTERM', () => {
   process.exit();
 });
 
-const http = require('http');
-
-const server = http.createServer((req, res) => {
-  // Add CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
-  
-  app(req, res);
-});
-
 let botModule;
-let bot;
-let startBot;
 
-app.use(express.json({ limit: '50mb' }));
-
-// Webhook endpoint - GET for verification, POST for updates
-app.get('/telegraf', (req, res) => {
-  res.send('SPORTS247 Bot is running!');
-});
-
+// Webhook endpoint - must be before app.listen
 app.post('/telegraf', async (req, res) => {
   try {
     const update = req.body;
-    
-    // Log update type for debugging
-    if (update.callback_query) {
-      console.log('🔘 Callback received:', update.callback_query.data);
-    } else if (update.message) {
-      console.log('💬 Message received:', update.message.text);
-    } else if (update.edited_message) {
-      console.log('✏️ Edited message');
-    }
+    console.log('Update received:', JSON.stringify(update).substring(0, 100));
     
     if (botModule && botModule.handleUpdate) {
       await botModule.handleUpdate(update);
     }
     res.send('OK');
   } catch (err) {
-    console.log('Webhook error:', err.message, err.stack);
+    console.log('Webhook error:', err.message);
     res.send('OK');
   }
 });
 
-server.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
-  // Initialize bot after a short delay
   setTimeout(() => {
     try {
       botModule = initBot();
       bot = botModule.bot;
       startBot = botModule.startBot;
-      
-      startBot().then(() => console.log('🤖 Bot started')).catch(err => console.log('Bot error:', err.message));
+      startBot().then(() => console.log('🤖 Bot started')).catch(e => console.log('Bot error:', e.message));
     } catch (err) {
       console.log('Bot init error:', err.message);
     }
-  }, 2000);
+  }, 3000);
 });
 
 // Global error handlers to prevent crash
