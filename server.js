@@ -8,13 +8,24 @@ const { Telegraf } = require('telegraf');
 const http = require('http');
 let BRAND;
 let initBot;
+
 try {
-  BRAND = require('./brand/brand');
-  initBot = require('./tg-bot').initBot;
+  BRAND = require('./brand');
 } catch (e) {
-  console.log('Brand/Bot load error:', e.message);
-  BRAND = { image: {} };
+  console.log('Brand load error:', e.message);
+  BRAND = { 
+    colors: { categories: {} },
+    image: { defaultLogo: null } 
+  };
 }
+
+try {
+  const botModule = require('./tg-bot');
+  initBot = botModule.initBot;
+} catch (e) {
+  console.log('Bot load error:', e.message);
+}
+
 let bot, startBot, handleUpdate;
 
 const app = express();
