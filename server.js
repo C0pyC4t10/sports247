@@ -1593,43 +1593,35 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });
 
-// Telegram Webhook endpoint - will be set after bot initializes
-let webhookReady = false;
-
-// Graceful shutdown
-process.once('SIGINT', () => {
-  try { bot.stop('SIGINT'); } catch(e) {}
-  process.exit();
-});
-process.once('SIGTERM', () => {
-  try { bot.stop('SIGTERM'); } catch(e) {}
-  process.exit();
-});
-
+// Bot variables
 let botModule;
 let bot;
 
-// Use Telegraf's native webhook callback - handles ALL updates including callback queries
-app.use('/telegraf', (req, res, next) => {
-  if (!bot) {
-    return res.send('Bot initializing...');
+// Telegraf's webhook callback - set after bot is initialized
+let telegramWebhook;
+
+app.post('/telegraf', async (req, res) => {
+  if (telegramWebhook) {
+    await telegramWebhook(req, res);
+  } else {
+    res.send('Bot initializing...');
   }
-  Telegraf.webhookCallback(bot, 'express')(req, res, next);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`সার্ভার চলছে: http://localhost:${PORT}`);
   
-  setTimeout(() => {
-    try {
-      botModule = initBot();
-      bot = botModule.bot;
-      startBot = botModule.startBot;
-      startBot().then(() => console.log('🤖 Bot started')).catch(e => console.log('Bot error:', e.message));
-    } catch (err) {
-      console.log('Bot init error:', err.message);
-    }
-  }, 3000);
+  await new Promise(r => setTimeout(r, 2000));
+  
+  try {
+    botModule = initBot();
+    bot = botModule.bot;
+    telegramWebhook = Telegraf.webhookCallback(bot, 'express');
+    await botModule.startBot();
+    console.log('🤖 Bot started');
+  } catch (err) {
+    console.log('Bot error:', err.message);
+  }
 });
 
 // Global error handlers to prevent crash
