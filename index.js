@@ -35,6 +35,15 @@ function imageStyleMenu() {
   ]);
 }
 
+function templateMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('🏏 Cricket News', 'tpl_cricket'), Markup.button.callback('⚽ Football News', 'tpl_football')],
+    [Markup.button.callback('🏀 Basketball', 'tpl_basketball'), Markup.button.callback('🎾 Tennis', 'tpl_tennis')],
+    [Markup.button.callback('🏆 Match Result', 'tpl_result'), Markup.button.callback('📰 Breaking News', 'tpl_breaking')],
+    [Markup.button.callback('⭐ Player Spotlight', 'tpl_player'), Markup.button.callback('🎉 Celebration', 'tpl_celebration')]
+  ]);
+}
+
 function initBot() {
   const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
   
@@ -49,6 +58,7 @@ function initBot() {
     { command: 'news_football', description: 'Football news only' },
     { command: 'analyze', description: 'AI analyze article URL' },
     { command: 'generate', description: 'Generate social media post' },
+    { command: 'template', description: 'AI template generator' },
     { command: 'image', description: 'Generate AI image' },
     { command: 'visual', description: 'Generate image with title' },
     { command: 'help', description: 'Show all commands' },
@@ -329,7 +339,17 @@ Ask "what can you do" for help
     const text = args.join(' ');
     
     if (!text) {
-      return sendMsg(chatId, 'Usage: /generate <sports-text>\n\nExample: /generate India wins world cup');
+      return sendMsg(chatId, `📝 *Social Post Generator*
+
+Choose a template style below or type:
+/generate <text>
+
+Examples:
+/generate India wins world cup
+/generate Messi scores hattrick`, { 
+        parse_mode: 'Markdown',
+        reply_markup: templateMenu().reply_markup
+      });
     }
     
     await sendMsg(chatId, '🎨 Generating social media posts...');
@@ -350,6 +370,30 @@ Ask "what can you do" for help
     } catch (error) {
       sendMsg(chatId, '❌ Failed to generate posts. Please try again.');
     }
+  });
+
+  bot.command('template', async (ctx) => {
+    const chatId = ctx.from.id;
+    await sendMsg(chatId, `🎨 *AI Template Generator*
+
+Choose a template style:
+
+🏏 Cricket News - Professional cricket news layout
+⚽ Football News - Football news layout  
+🏀 Basketball - Basketball news
+🎾 Tennis - Tennis news
+🏆 Match Result - Score/result announcement
+📰 Breaking News - Breaking news style
+⭐ Player Spotlight - Player profile
+🎉 Celebration - Victory/achievement
+
+Click a template or type:
+/template <topic> - <template>
+
+Example: /template India wins - cricket`, { 
+      parse_mode: 'Markdown',
+      reply_markup: templateMenu().reply_markup
+    });
   });
 
   bot.command('image', async (ctx) => {
@@ -633,7 +677,10 @@ What would you like to create?`, { parse_mode: 'Markdown' });
     } else if (query === 'analyze_btn') {
       await sendMsg(chatId, '📊 *AI Analyze Article*\n\nSend me a URL to analyze:\n\nExample: https://espncricinfo.com/...', { parse_mode: 'Markdown' });
     } else if (query === 'generate_btn') {
-      await sendMsg(chatId, '🎨 *Generate Social Post*\n\nDescribe what you want to post about:\n\nExample: India wins world cup\n\nOr use /generate <text>', { parse_mode: 'Markdown' });
+      await sendMsg(chatId, '🎨 *Generate Social Post / Template*\n\n*Choose a template:*\n\nOr type: /generate <text>\n\nUse /template for more styles!', { 
+        parse_mode: 'Markdown',
+        reply_markup: templateMenu().reply_markup
+      });
     } else if (query === 'image_btn') {
       await sendMsg(chatId, '🖼️ *Generate AI Image*\n\n*Select a style:*\n\nOr type: /image <prompt>\nExample: /image Cricket celebration -anime', { 
         parse_mode: 'Markdown',
@@ -685,6 +732,66 @@ Type /help for full menu`, { parse_mode: 'Markdown', reply_markup: mainMenu().re
         parse_mode: 'Markdown',
         reply_markup: mainMenu().reply_markup
       });
+    } else if (query.startsWith('tpl_')) {
+      const template = query.replace('tpl_', '');
+      let templateName = '';
+      let templatePrompt = '';
+      
+      if (template === 'cricket') {
+        templateName = '🏏 Cricket News';
+        templatePrompt = 'Professional cricket news layout with cricket ball, stadium background, breaking news headline';
+      } else if (template === 'football') {
+        templateName = '⚽ Football News';
+        templatePrompt = 'Football news layout with soccer ball, stadium, dramatic match moment';
+      } else if (template === 'basketball') {
+        templateName = '🏀 Basketball';
+        templatePrompt = 'Basketball news layout with basketball, arena, game action';
+      } else if (template === 'tennis') {
+        templateName = '🎾 Tennis';
+        templatePrompt = 'Tennis news layout with tennis court, racket, player in action';
+      } else if (template === 'result') {
+        templateName = '🏆 Match Result';
+        templatePrompt = 'Match result announcement with trophy, celebration, scoreboard';
+      } else if (template === 'breaking') {
+        templateName = '📰 Breaking News';
+        templatePrompt = 'Breaking news alert style, urgent, dramatic headline, red accents';
+      } else if (template === 'player') {
+        templateName = '⭐ Player Spotlight';
+        templatePrompt = 'Player portrait spotlight, professional sports profile, stadium background';
+      } else if (template === 'celebration') {
+        templateName = '🎉 Celebration';
+        templatePrompt = 'Victory celebration, confetti, trophy, team hugging, fans cheering';
+      }
+      
+      const brandLogo = BRAND?.image?.defaultLogo || null;
+      
+      await sendMsg(chatId, `🎨 Generating ${templateName} template...\n\n"${templatePrompt}"`);
+      
+      try {
+        const response = await axios.post(`${API_BASE}/generate-visual`, { 
+          prompt: templatePrompt,
+          logo: brandLogo,
+          width: 1024,
+          height: 1024,
+          style: 'cinematic',
+          title: templateName,
+          titleBarColor: 'dark'
+        }, { timeout: 90000 });
+        
+        const imageUrl = response.data.imageUrl || response.data.url;
+        
+        if (imageUrl) {
+          await bot.telegram.sendPhoto(chatId, imageUrl, {
+            caption: `🎨 ${templateName}\n\n_${templatePrompt}_\n\nGenerated by SPORTS247 AI`,
+            parse_mode: 'Markdown'
+          });
+        } else {
+          await sendMsg(chatId, `❌ Failed to generate ${templateName}. Try again.`);
+        }
+      } catch (error) {
+        console.log('Template gen error:', error.message);
+        await sendMsg(chatId, '❌ Failed to generate template. Try again.');
+      }
     }
     } catch (error) {
       console.log('Callback error:', error.message);
