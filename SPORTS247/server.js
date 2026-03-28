@@ -214,7 +214,10 @@ function removeDuplicates(news) {
   return unique;
 }
 
-app.get('/trending', async (req, res) => {
+app.get('/trending/:category?', async (req, res) => {
+  const category = req.params.category || 'All';
+  console.log('Fetching trending news for category:', category);
+  
   try {
     const allNews = [];
     
@@ -242,8 +245,14 @@ app.get('/trending', async (req, res) => {
         .slice(0, 8);
     });
     
+    // Filter by category if specified
+    let trending = sortedNews.slice(0, 15);
+    if (category && category !== 'All' && byCategory[category]) {
+      trending = byCategory[category].slice(0, 15);
+    }
+    
     res.json({
-      trending: sortedNews.slice(0, 15),
+      trending: trending,
       categories: CATEGORIES,
       byCategory
     });
@@ -735,7 +744,8 @@ Generate EXACTLY 4 posts in JSON format:
       const fallbackPosts = generateFallbackPosts(articleText);
       if (fallbackPosts.length > 0) {
         console.log('Using fallback posts');
-        return res.json({ posts: fallbackPosts });
+        const postsWithImage = fallbackPosts.map(p => ({ ...p, originalImage: referenceImage || null }));
+        return res.json({ posts: postsWithImage });
       }
       
       throw new Error(`JSON parsing failed: ${parseResult.error}`);
@@ -751,20 +761,23 @@ Generate EXACTLY 4 posts in JSON format:
         type: post.type || 'Informative',
         fbCaption: post.fbCaption || '',
         hashtags: Array.isArray(post.hashtags) ? post.hashtags : (post.hashtag ? [post.hashtag] : []),
-        imagePrompt: post.imagePrompt || ''
+        imagePrompt: post.imagePrompt || '',
+        originalImage: referenceImage || null
       }));
     } else if (parsed.fbCaption) {
       postsArray.push({
         type: 'Informative',
         fbCaption: parsed.fbCaption,
         hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
-        imagePrompt: parsed.imagePrompt || ''
+        imagePrompt: parsed.imagePrompt || '',
+        originalImage: referenceImage || null
       });
     }
 
     if (postsArray.length === 0) {
       const fallbackPosts = generateFallbackPosts(articleText);
-      return res.json({ posts: fallbackPosts });
+      const postsWithImage = fallbackPosts.map(p => ({ ...p, originalImage: referenceImage || null }));
+      return res.json({ posts: postsWithImage });
     }
 
     res.json({ posts: postsArray });
@@ -772,7 +785,11 @@ Generate EXACTLY 4 posts in JSON format:
     console.error('=== Generate FB Visual Error ===');
     console.error('Error Message:', error.message);
     console.error('================================');
-    res.status(500).json({ error: error.message || 'Failed to generate visual content' });
+    
+    // Return fallback posts instead of error
+    const fallbackPosts = generateFallbackPosts(articleText);
+    const postsWithImage = fallbackPosts.map(p => ({ ...p, originalImage: referenceImage || null }));
+    res.json({ posts: postsWithImage });
   }
 });
 
@@ -1035,11 +1052,15 @@ app.get('/size-presets', (req, res) => {
 });
 
 app.post('/generate-visual', async (req, res) => {
-  const { prompt, imageFile, logo, title = '', width = 1024, height = 1024, sizePreset, style = 'cinematic', titleBarColor = 'dark', titleBarTextColor = 'white', variations = false, logoPosition = 'top-right', aiEnhance = true, resizeMode = 'cover' } = req.body;
+  const { prompt, imageFile, logo, title = '', width = 1024, height = 1024, sizePreset, style = 'cinematic', titleBarColor = 'dark', titleBarTextColor = 'white', variations = true, logoPosition = 'top-right', aiEnhance = true, resizeMode = 'cover' } = req.body;
   
   console.log('imageFile received:', imageFile ? (imageFile.substring(0, 50) + '...') : 'none');
+  console.log('imageFile type:', imageFile ? (imageFile.startsWith('data:') ? 'base64' : 'url') : 'none');
   
   console.log('Logo received:', logo ? 'yes, length: ' + logo.length : 'no');
+
+  console.log('Title bar color:', titleBarColor, '-> fill:', TITLE_BAR_COLORS[titleBarColor]);
+  console.log('Title text color:', titleBarTextColor, '-> fill:', TITLE_BAR_TEXT_COLORS[titleBarTextColor]);
 
   if (!prompt) {
     return res.status(400).json({ error: 'Prompt is required' });
@@ -1073,259 +1094,250 @@ app.post('/generate-visual', async (req, res) => {
     
     // Function to generate a single image
     async function generateSingleImage(variationPrompt, variationSeed, variationName) {
+      console.log('[generateSingleImage] imageFile available:', !!imageFile);
       let baseImageBuffer;
       const sportType = detectSport(variationPrompt);
       
-      // Use reference image if provided (base64 or URL)
+      // PRIORITY: Always use reference image if provided - skip AI generation entirely
+      let image;
+      let isImg2Img = false;
+      
       if (imageFile) {
-        if (imageFile.startsWith('data:image')) {
-          // Base64 image
-          const refData = imageFile.replace(/^data:image\/\w+;base64,/, '');
-          baseImageBuffer = Buffer.from(refData, 'base64');
-        } else if (imageFile.startsWith('http')) {
-          // URL image - fetch it
-          try {
-            const imgResponse = await axios.get(imageFile, { responseType: 'arraybuffer', timeout: 30000 });
+        console.log('[generateSingleImage] ★ PRIORITY: Reference image detected, using it as base');
+        console.log('[generateSingleImage] Processing imageFile, length:', imageFile.length);
+        
+        try {
+          if (imageFile.startsWith('data:image')) {
+            // Base64 image
+            const refData = imageFile.replace(/^data:image\/\w+;base64,/, '');
+            baseImageBuffer = Buffer.from(refData, 'base64');
+            console.log('[generateSingleImage] Base64 image processed, buffer length:', baseImageBuffer.length);
+          } else if (imageFile.startsWith('http')) {
+            // URL image - fetch it with proper headers
+            console.log('[generateSingleImage] Fetching URL image:', imageFile.substring(0, 80));
+            const imgResponse = await axios.get(imageFile, { 
+              responseType: 'arraybuffer', 
+              timeout: 30000,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'image/webp,image/png,image/jpeg,*/*'
+              }
+            });
             baseImageBuffer = Buffer.from(imgResponse.data);
-          } catch (imgErr) {
-            console.error('Failed to fetch reference image:', imgErr.message);
+            console.log('[generateSingleImage] URL image fetched, buffer length:', baseImageBuffer.length);
           }
+          
+          // Use reference image as base - PRIORITY MODE
+          if (baseImageBuffer) {
+            console.log('[generateSingleImage] ★ Using reference image as PRIORITY base');
+            image = sharp(baseImageBuffer);
+            
+            const metadata = await image.metadata();
+            console.log('[generateSingleImage] Original reference image:', metadata.width, 'x', metadata.height);
+            
+            // Resize to target dimensions
+            image = image.resize(finalWidth, finalHeight, { fit: resizeMode || 'cover' });
+            console.log('[generateSingleImage] Resized to:', finalWidth, 'x', finalHeight);
+            
+            // Add dark overlay to make text readable
+            image = image.composite([{
+              input: Buffer.from(`<svg width="${finalWidth}" height="${finalHeight}"><rect width="100%" height="100%" fill="rgba(0,0,0,0.25)"/></svg>`),
+              top: 0,
+              left: 0
+            }]);
+            
+            isImg2Img = true;
+            console.log('[generateSingleImage] ★ PRIORITY: Reference image ready, skipping AI generation');
+            
+            // Skip AI generation entirely - return with reference image
+            const composites = [];
+            
+            // Add logo
+            if (logo && logo.startsWith('data:image')) {
+              const logoData = logo.replace(/^data:image\/\w+;base64,/, '');
+              const logoBuffer = Buffer.from(logoData, 'base64');
+              const logoMetadata = await sharp(logoBuffer).metadata();
+              
+              let logoWidth = Math.round(finalWidth * 0.20);
+              logoWidth = Math.max(50, Math.min(logoWidth, 200));
+              const logoHeight = Math.round((logoWidth / logoMetadata.width) * logoMetadata.height);
+              
+              const cornerRadius = Math.round(logoWidth * 0.08);
+              
+              const roundedMask = await sharp({
+                create: {
+                  width: logoWidth,
+                  height: logoHeight,
+                  channels: 4,
+                  background: { r: 0, g: 0, b: 0, alpha: 0 }
+                }
+              }).composite([{
+                input: Buffer.from(`<svg width="${logoWidth}" height="${logoHeight}"><rect x="0" y="0" width="${logoWidth}" height="${logoHeight}" rx="${cornerRadius}" ry="${cornerRadius}" fill="white"/></svg>`),
+                top: 0,
+                left: 0
+              }]).png().toBuffer();
+              
+              const resizedLogo = await sharp(logoBuffer)
+                .resize(logoWidth, logoHeight)
+                .composite([{ input: roundedMask, blend: 'dest-in' }])
+                .png()
+                .toBuffer();
+              
+              const positionPadding = 20;
+              let left = finalWidth - logoWidth - positionPadding;
+              let top = positionPadding;
+              
+              composites.push({ input: resizedLogo, left, top });
+            }
+            
+            // Add title bar
+            const titleText = title || 'SPORTS247';
+            const titleSize = Math.round(finalWidth * 0.04);
+            const titleBarHeight = Math.round(finalWidth * 0.30);
+            const brandSize = Math.round(finalWidth * 0.016);
+            
+            const wrappedLines = titleText.length > 40 ? [titleText.substring(0, 40), titleText.substring(40)] : [titleText];
+            const lineHeight = titleSize * 1.2;
+            const totalTextHeight = wrappedLines.length * lineHeight;
+            const textStartY = finalHeight - titleBarHeight + (titleBarHeight - totalTextHeight) / 2 + titleSize * 0.4;
+            
+            let textLinesSvg = '';
+            wrappedLines.forEach((line, i) => {
+              textLinesSvg += `<tspan x="${finalWidth/2}" dy="${i === 0 ? 0 : lineHeight}">${line}</tspan>`;
+            });
+            
+            const textSvg = Buffer.from(`
+              <svg width="${finalWidth}" height="${finalHeight}">
+                <defs>
+                  <linearGradient id="barGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:rgba(0,0,0,0);stop-opacity:0" />
+                    <stop offset="100%" style="stop-color:rgba(0,0,0,0.85);stop-opacity:1" />
+                  </linearGradient>
+                  <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:#00ff88" />
+                    <stop offset="100%" style="stop-color:#58a6ff" />
+                  </linearGradient>
+                </defs>
+                <rect x="0" y="${finalHeight - 140}" width="${finalWidth}" height="140" fill="url(#barGrad)"/>
+                <rect x="0" y="${finalHeight - 95}" width="${finalWidth * 0.4}" height="3" fill="url(#accentGrad)"/>
+                <rect x="0" y="${finalHeight - titleBarHeight}" width="${finalWidth}" height="${titleBarHeight}" fill="${TITLE_BAR_COLORS[titleBarColor] || TITLE_BAR_COLORS.dark}" opacity="0.95"/>
+                <text x="${finalWidth/2}" y="${textStartY}" font-family="Oswald, Impact, Arial Black, sans-serif" font-size="${titleSize}" fill="${TITLE_BAR_TEXT_COLORS[titleBarTextColor] || TITLE_BAR_TEXT_COLORS.white}" font-weight="bold" letter-spacing="1" text-anchor="middle" dominant-baseline="middle">${textLinesSvg}</text>
+                <rect x="0" y="${finalHeight - 30}" width="${finalWidth}" height="30" fill="#ffffff" opacity="0.9"/>
+                <text x="20" y="${finalHeight - 12}" font-family="Arial" font-size="${brandSize}" fill="#1a1a2e" font-weight="600" letter-spacing="1">SPORTS247</text>
+                <text x="${finalWidth - 20}" y="${finalHeight - 12}" font-family="Arial" font-size="${brandSize}" fill="#1a1a2e" font-weight="bold" letter-spacing="1" text-anchor="end">${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</text>
+              </svg>
+            `);
+            
+            composites.push({ input: textSvg, top: 0, left: 0 });
+            image = image.composite(composites);
+            
+            const pngBuffer = await image.png().toBuffer();
+            console.log('[generateSingleImage] ★ PRIORITY: Final image created with reference, length:', pngBuffer.length);
+            return { imageUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`, isImg2Img: true };
+          }
+        } catch (refErr) {
+          console.error('[generateSingleImage] Reference image processing failed:', refErr.message);
+          baseImageBuffer = null;
+        }
+      } else {
+        console.log('[generateSingleImage] No imageFile provided, will generate AI image');
+      }
+      
+      console.log('[generateSingleImage] Initial mode check - baseImageBuffer exists:', !!baseImageBuffer);
+      
+      if (baseImageBuffer) {
+        console.log('[generateSingleImage] Using reference image as base, buffer size:', baseImageBuffer.length);
+        try {
+          // Use the reference image as base
+          image = sharp(baseImageBuffer);
+          
+          // Get metadata
+          const metadata = await image.metadata();
+          console.log('[generateSingleImage] Original image:', metadata.width, 'x', metadata.height);
+          
+          // Resize to target dimensions maintaining aspect ratio (fill & crop to fit)
+          image = image.resize(finalWidth, finalHeight, { fit: resizeMode });
+          console.log('[generateSingleImage] Resized to:', finalWidth, 'x', finalHeight);
+          
+          // Add dark overlay to make text readable
+          image = image.composite([{
+            input: Buffer.from(`<svg width="${finalWidth}" height="${finalHeight}"><rect width="100%" height="100%" fill="rgba(0,0,0,0.25)"/></svg>`),
+            top: 0,
+            left: 0
+          }]);
+          console.log('[generateSingleImage] Dark overlay added, img2img mode confirmed');
+          isImg2Img = true;
+        } catch (sharpErr) {
+          console.error('[generateSingleImage] Sharp processing error:', sharpErr.message);
+          // Fall back to AI generation
+          baseImageBuffer = null;
+          isImg2Img = false;
         }
       }
       
-      // If we have a reference image, use it
-      let image;
-      if (baseImageBuffer) {
-        // Use the reference image as base
-        image = sharp(baseImageBuffer);
+      if (!baseImageBuffer) {
+        console.log('[generateSingleImage] No reference image - falling back to FAST AI generation');
         
-        // Resize to target dimensions maintaining aspect ratio (fill & crop to fit)
-        image = image.resize(finalWidth, finalHeight, { fit: resizeMode });
-        
-        // Add dark overlay
-        image = image.composite([{
-          input: Buffer.from(`<svg width="${finalWidth}" height="${finalHeight}"><rect width="100%" height="100%" fill="rgba(0,0,0,0.25)"/></svg>`),
-          top: 0,
-          left: 0
-        }]);
-      } else {
-        // Generate AI image using multiple free services
-        let generated = false;
-        
-        // Try method 0: FluxImageGen (free, no auth required)
-        if (!generated) {
-          try {
-            console.log('Trying FluxImageGen (free API)...');
-            const fluxResponse = await axios.post('https://fluximagegen.com/api/generate', {
-              prompt: variationPrompt,
-              style: 'photorealism'
-            }, {
-              timeout: 60000
-            });
-            
-            if (fluxResponse.data && fluxResponse.data.success && fluxResponse.data.imageUrl) {
-              console.log('FluxImageGen URL:', fluxResponse.data.imageUrl);
-              const fluxImgResponse = await axios.get(fluxResponse.data.imageUrl, {
-                responseType: 'arraybuffer',
-                timeout: 60000
-              });
-              baseImageBuffer = Buffer.from(fluxImgResponse.data);
-              generated = true;
-              console.log('FluxImageGen image generated successfully');
-            }
-          } catch (fluxError) {
-            console.error('FluxImageGen failed:', fluxError.message);
-          }
-        }
-        
-        // Try method 0b: Black Forest Labs FLUX via OpenRouter (if credits available)
-        if (!generated && process.env.OPENROUTER_API_KEY) {
-          try {
-            console.log('Trying Black Forest FLUX via OpenRouter...');
-            const fluxResponse = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-              model: "black-forest-labs/flux-1-schnell",
-              messages: [
-                { role: "user", content: variationPrompt }
-              ]
-            }, {
-              headers: {
-                'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://sports247-2.onrender.com',
-                'X-Title': 'SPORTS247'
-              },
-              timeout: 60000
-            });
-            
-            const fluxImageUrl = fluxResponse.data.choices[0].message.content;
-            console.log('FLUX generated URL:', fluxImageUrl);
-            
-            if (fluxImageUrl && fluxImageUrl.startsWith('http')) {
-              const fluxImgResponse = await axios.get(fluxImageUrl, {
-                responseType: 'arraybuffer',
-                timeout: 60000
-              });
-              baseImageBuffer = Buffer.from(fluxImgResponse.data);
-              generated = true;
-              console.log('FLUX image generated successfully');
-            }
-          } catch (fluxError) {
-            console.error('FLUX failed:', fluxError.message);
-          }
-        }
-        
-        // Try method 1: AI Image Generator (Pollinations with auth)
-        if (!generated) {
-          try {
-            console.log('Trying Pollinations AI (with auth)...');
-            const pollinUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(variationPrompt)}?width=${Math.min(finalWidth, 1024)}&height=${Math.min(finalHeight, 1024)}&nologo=true&seed=${variationSeed || Math.floor(Math.random() * 10000)}&model=flux${POLLINATIONS_API_KEY ? '&key=' + POLLINATIONS_API_KEY : ''}`;
-            
-            const imgResponse = await axios.get(pollinUrl, { 
-              responseType: 'arraybuffer', 
-              timeout: 120000,
-              maxRedirects: 5,
-              headers: { 'Accept': 'image/png,image/jpeg,*/*' }
-            });
-            
-            if (imgResponse.data && imgResponse.data.length > 1000) {
-              baseImageBuffer = Buffer.from(imgResponse.data);
-              generated = true;
-              console.log('Pollinations image generated successfully');
-            }
-          } catch (aiGenError) {
-            console.error('Pollinations failed:', aiGenError.message);
-          }
-        }
-        
-        // Try method 2: Pollinations with flux model (with auth)
+        // FASTEST METHOD: Direct Pollinations (skip slow services)
         try {
-          const enhancedPrompt = enhanceImagePrompt(variationPrompt, sportType);
-          const seed = variationSeed || Math.floor(Math.random() * 10000);
+          console.log('[generateSingleImage] Using Pollinations (FAST - 10-15s max)...');
+          const seed = Math.floor(Math.random() * 100000);
+          const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(variationPrompt)}?width=${Math.min(finalWidth, 1024)}&height=${Math.min(finalHeight, 1024)}&nologo=true&seed=${seed}&model=flux`;
           
-          console.log('Trying Pollinations with prompt:', enhancedPrompt.substring(0, 60));
-          
-          const pollinUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=${Math.min(finalWidth, 1024)}&height=${Math.min(finalHeight, 1024)}&nologo=true&seed=${seed}&model=flux${POLLINATIONS_API_KEY ? '&key=' + POLLINATIONS_API_KEY : ''}`;
-          
-          const imgResponse = await axios.get(pollinUrl, { 
-            responseType: 'arraybuffer', 
-            timeout: 120000,
-            maxRedirects: 5,
-            headers: { 'Accept': 'image/png,image/jpeg,*/*' }
+          const pollResponse = await axios.get(pollinationsUrl, {
+            responseType: 'arraybuffer',
+            timeout: 15000
           });
           
-          if (imgResponse.data && imgResponse.data.length > 1000) {
-            baseImageBuffer = Buffer.from(imgResponse.data);
-            generated = true;
-            console.log('Pollinations image generated successfully');
+          if (pollResponse.data && pollResponse.data.length > 1000) {
+            baseImageBuffer = Buffer.from(pollResponse.data);
+            console.log('[generateSingleImage] Pollinations image generated (FAST!)');
           }
-        } catch (pollinError) {
-          console.error('Pollinations failed:', pollinError.message);
+        } catch (pollErr) {
+          console.error('[generateSingleImage] Pollinations failed:', pollErr.message);
         }
         
-        // Try method 3: Alternate Pollinations URL (with auth)
-        if (!generated) {
-          try {
-            console.log('Trying alternate Pollinations...');
-            const altUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(variationPrompt)}?width=${Math.min(finalWidth, 1024)}&height=${Math.min(finalHeight, 1024)}&nologo=true&model=flux${POLLINATIONS_API_KEY ? '&key=' + POLLINATIONS_API_KEY : ''}`;
-            const altResponse = await axios.get(altUrl, { 
-              responseType: 'arraybuffer', 
-              timeout: 120000 
-            });
-            if (altResponse.data && altResponse.data.length > 1000) {
-              baseImageBuffer = Buffer.from(altResponse.data);
-              generated = true;
-              console.log('Alternate Pollinations worked');
-            }
-          } catch (altError) {
-            console.error('Alternate failed:', altError.message);
-          }
-        }
-        
-        // Try method 2: Use Hugging Face if Pollinations failed
-        if (!generated) {
-          try {
-            console.log('Trying Hugging Face...');
-            const hfResponse = await axios.post(
-              'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0',
-              { 
-                inputs: variationPrompt,
-                parameters: {
-                  negative_prompt: negativePrompt,
-                  guidance_scale: 7.5,
-                  num_inference_steps: 30
-                }
-              },
-              { 
-                responseType: 'arraybuffer',
-                timeout: 90000,
-                headers: { 'Content-Type': 'application/json' }
-              }
-            );
-            baseImageBuffer = Buffer.from(hfResponse.data);
-            generated = true;
-            console.log('Hugging Face image generated');
-          } catch (hfError) {
-            console.error('Hugging Face failed:', hfError.message);
-          }
-        }
-        
-        // Try method 4: Direct Pollinations with auth
-        if (!generated) {
-          try {
-            console.log('Trying direct Pollinations...');
-            const directUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(variationPrompt)}?width=${Math.min(finalWidth, 1024)}&height=${Math.min(finalHeight, 1024)}&nologo=true&seed=${variationSeed || Math.floor(Math.random() * 10000)}&model=flux${POLLINATIONS_API_KEY ? '&key=' + POLLINATIONS_API_KEY : ''}`;
-            const directResponse = await axios.get(directUrl, { 
-              responseType: 'arraybuffer', 
-              timeout: 120000 
-            });
-            if (directResponse.data && directResponse.data.length > 1000) {
-              baseImageBuffer = Buffer.from(directResponse.data);
-              generated = true;
-              console.log('Direct Pollinations worked');
-            }
-          } catch (directError) {
-            console.error('Direct Pollinations failed:', directError.message);
-          }
-        }
-        
-        // Try method 5: Use Pollinations v1 API with auth
-        if (!generated) {
-          try {
-            console.log('Trying Pollinations v1 API...');
-            const altApiUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(variationPrompt)}?width=${Math.min(finalWidth, 1024)}&height=${Math.min(finalHeight, 1024)}&nologo=true&seed=${variationSeed || Math.floor(Math.random() * 10000)}&model=flux${POLLINATIONS_API_KEY ? '&key=' + POLLINATIONS_API_KEY : ''}`;
-            const altApiResponse = await axios.get(altApiUrl, {
-              responseType: 'arraybuffer',
-              timeout: 120000,
-              headers: { 'Accept': 'image/*' }
-            });
-            if (altApiResponse.data && altApiResponse.data.length > 1000) {
-              baseImageBuffer = Buffer.from(altApiResponse.data);
-              generated = true;
-              console.log('Pollinations v1 API worked');
-            }
-          } catch (altApiError) {
-            console.error('Pollinations v1 failed:', altApiError.message);
-          }
-        }
-        
-        // Final fallback: Sports-themed random image from Unsplash
-        if (!generated) {
-          console.error('All AI generation failed, using sports image fallback');
+        // If Pollinations failed, try Unsplash fallback (very fast)
+        if (!baseImageBuffer) {
+          console.log('[generateSingleImage] Using Unsplash fallback (SUPER FAST)...');
           const sportsImages = [
             'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800&q=80',
             'https://images.unsplash.com/photo-1574629810360-7ef0d255b286?w=800&q=80',
             'https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=800&q=80',
-            'https://images.unsplash.com/photo-1431324155629-1a6deb8dec8a?w=800&q=80',
-            'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&q=80',
-            'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80'
+            'https://images.unsplash.com/photo-1431324155629-1a6deb8dec8a?w=800&q=80'
           ];
           const randomImage = sportsImages[Math.floor(Math.random() * sportsImages.length)];
-          const fallbackResponse = await axios.get(randomImage, { 
-            responseType: 'arraybuffer', 
-            timeout: 30000 
-          });
-          baseImageBuffer = Buffer.from(fallbackResponse.data);
+          try {
+            const fallbackResponse = await axios.get(randomImage, { 
+              responseType: 'arraybuffer', 
+              timeout: 8000 
+            });
+            baseImageBuffer = Buffer.from(fallbackResponse.data);
+            console.log('[generateSingleImage] Unsplash fallback ready');
+          } catch (unsplashErr) {
+            console.error('[generateSingleImage] Unsplash fallback failed:', unsplashErr.message);
+          }
         }
+      }
+      
+      // Create image from AI-generated buffer if it exists
+      console.log('[generateSingleImage] Before image creation - baseImageBuffer:', !!baseImageBuffer, baseImageBuffer ? baseImageBuffer.length : 0);
+      if (baseImageBuffer && !image) {
+        try {
+          console.log('[generateSingleImage] Creating sharp image from buffer...');
+          image = sharp(baseImageBuffer);
+          // Resize to target dimensions
+          image = image.resize(finalWidth, finalHeight, { fit: resizeMode || 'cover' });
+          console.log('[generateSingleImage] Created image from AI-generated buffer');
+        } catch (imgErr) {
+          console.error('[generateSingleImage] Failed to create image from buffer:', imgErr.message);
+        }
+      }
+      
+      if (!image) {
+        console.error('[generateSingleImage] No image could be created!');
+        console.log('[generateSingleImage] baseImageBuffer:', !!baseImageBuffer);
+        throw new Error('Failed to create image');
       }
       
       const composites = [];
@@ -1405,14 +1417,13 @@ app.post('/generate-visual', async (req, res) => {
           top: top
         });
       }
-    // Extract catchy title from prompt - smart headline generation
+    // Extract catchy title from prompt - preserve original casing
     function generateCatchyTitle(originalPrompt) {
       let title = originalPrompt
         .replace(/\s+/g, ' ')
         .trim();
       
-      // Convert to proper title case
-      title = title.replace(/\w+/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+      // Keep original casing - no title case conversion
       
       // Keep it professional - max 55 chars
       if (title.length > 55) {
@@ -1540,22 +1551,24 @@ app.post('/generate-visual', async (req, res) => {
     
     // Convert to PNG
     const pngBuffer = await image.png().toBuffer();
-    return `data:image/png;base64,${pngBuffer.toString('base64')}`;
+    console.log('[generateSingleImage] Final imageUrl length:', pngBuffer.length);
+    return { imageUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`, isImg2Img: isImg2Img };
     }
 
     // Generate images for all variations
     const generatedVariations = [];
     
-    // Only generate 1 image if variations is false
-    const numToGenerate = variations ? promptVariations.length : 1;
+    // Generate multiple variations by default (3 images)
+    const numToGenerate = variations ? Math.min(promptVariations.length, 3) : 1;
     const variationsToGenerate = promptVariations.slice(0, numToGenerate);
     
     for (let i = 0; i < variationsToGenerate.length; i++) {
       const variation = variationsToGenerate[i];
       try {
-        const imageUrl = await generateSingleImage(variation.prompt, variation.seed, variation.name);
+        const result = await generateSingleImage(variation.prompt, variation.seed, variation.name);
         generatedVariations.push({
-          imageUrl: imageUrl,
+          imageUrl: result.imageUrl,
+          isImg2Img: result.isImg2Img,
           variation: variation.name,
           enhancedPrompt: variation.prompt
         });
@@ -1567,8 +1580,14 @@ app.post('/generate-visual', async (req, res) => {
     
     // If no variations were generated, return error
     if (generatedVariations.length === 0) {
+      console.error('[generateSingleImage] No images generated - all variations failed');
       throw new Error('Failed to generate any images');
     }
+    
+    // Determine if img2img was used
+    const usedImg2Img = generatedVariations.some(v => v.isImg2Img);
+    console.log('[generateSingleImage] Successfully generated', generatedVariations.length, 'images, isImg2Img:', usedImg2Img);
+    console.log('[generateSingleImage] First image URL length:', generatedVariations[0].imageUrl.length);
     
     res.json({
       success: true,
@@ -1578,7 +1597,7 @@ app.post('/generate-visual', async (req, res) => {
       negativePrompt: negativePrompt,
       style: style,
       prompt: prompt,
-      mode: 'text2image',
+      mode: usedImg2Img ? 'img2img' : 'text2image',
       logo: logo || null,
       size: { width: finalWidth, height: finalHeight },
       sizePreset: sizePreset || 'custom'

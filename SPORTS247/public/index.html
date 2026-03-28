@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SPORTS247 - Trending Sports News</title>
+    <script>console.log('[INIT] JavaScript loaded');</script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', Arial, sans-serif; }
@@ -682,6 +683,9 @@
             <button onclick="filterCategory('football')">⚽ Football</button>
             <button onclick="filterCategory('basketball')">🏀 Basketball</button>
             <button onclick="filterCategory('tennis')">🎾 Tennis</button>
+            <button onclick="filterCategory('formula1')">🏎️ F1</button>
+            <button onclick="filterCategory('golf')">⛳ Golf</button>
+            <button onclick="filterCategory('boxing')">🥊 Boxing</button>
         </div>
 
         <div class="news-grid" id="newsGrid">
@@ -697,16 +701,17 @@
         let allNews = [];
         let currentArticleText = '';
         let uploadedImage = null;
+        let currentCategory = 'all';
         
-        async function loadTrending() {
+        async function loadTrending(category = 'all') {
             console.log('[DEBUG] Starting loadTrending...');
             const grid = document.getElementById('newsGrid');
             console.log('[DEBUG] Grid element:', grid);
             grid.innerHTML = '<div class="loading">Loading latest sports news...</div>';
             
             try {
-                console.log('[DEBUG] Fetching /trending...');
-                const url = '/trending?_=' + Date.now();
+                console.log('[DEBUG] Fetching /trending/' + category + '...');
+                const url = '/trending/' + category + '?_=' + Date.now();
                 console.log('[DEBUG] Full URL:', window.location.origin + url);
                 
                 const response = await fetch(url);
@@ -760,16 +765,20 @@
             document.querySelectorAll('.category-tabs button').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
             
-            if (cat === 'all') {
-                renderNews(allNews);
-            } else {
-                renderNews(allNews.filter(n => n.category === cat));
-            }
+            currentCategory = cat;
+            loadTrending(cat);
         }
         
         let currentNewsItem = null;
 
         async function openNewsDetail(newsItem) {
+            console.log('[DEBUG] openNewsDetail called with:', JSON.stringify(newsItem));
+            
+            if (!newsItem || !newsItem.link) {
+                alert('Invalid news item - no link available');
+                return;
+            }
+            
             currentNewsItem = newsItem;
             currentArticleText = '';
             
@@ -787,24 +796,53 @@
             
             async function tryAnalyze(newsItem, index = 0) {
                 try {
-                    // First, fetch the raw article content
-                    const fetchResponse = await fetch('/fetch-url', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: newsItem.link })
-                    });
+                    console.log('[DEBUG] tryAnalyze URL:', newsItem.link);
                     
-                    const fetchData = await fetchResponse.json();
+                    if (!newsItem || !newsItem.link) {
+                        throw new Error('No URL provided');
+                    }
+                    
+                    let fetchResponse;
+                    try {
+                        fetchResponse = await fetch('/fetch-url', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: newsItem.link })
+                        });
+                        console.log('[DEBUG] fetchResponse status:', fetchResponse.status);
+                        console.log('[DEBUG] fetchResponse type:', fetchResponse.headers.get('content-type'));
+                    } catch (fetchErr) {
+                        throw new Error('Fetch error: ' + fetchErr.message);
+                    }
+                    
+                    if (!fetchResponse.ok) {
+                        throw new Error('fetch-url failed: ' + fetchResponse.status);
+                    }
+                    
+                    const text = await fetchResponse.text();
+                    console.log('[DEBUG] Response text preview:', text.substring(0, 200));
+                    
+                    let fetchData;
+                    try {
+                        fetchData = JSON.parse(text);
+                    } catch (parseErr) {
+                        throw new Error('JSON parse error: ' + parseErr.message + ' - Response: ' + text.substring(0, 100));
+                    }
                     let articleContent = fetchData.content || '';
+                    let articleImage = fetchData.image || newsItem.image || '';
                     
                     // If fetch failed, try the analyze endpoint as fallback
                     if (!articleContent) {
+                        console.log('[DEBUG] No article content, trying /analyze fallback');
                         const analyzeResponse = await fetch('/analyze', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ url: newsItem.link })
                         });
                         
+                        if (!analyzeResponse.ok) {
+                            throw new Error('/analyze failed: ' + analyzeResponse.status);
+                        }
                         const analyzeData = await analyzeResponse.json();
                         articleContent = analyzeData.result || '';
                         
@@ -822,23 +860,68 @@
                     currentArticleText = articleContent;
                     
                     // Now generate the visual content from the article text
+                    console.log('[DEBUG] Calling /generate-fb-visual...');
                     const visualResponse = await fetch('/generate-fb-visual', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             articleText: articleContent,
                             articleTitle: newsItem.title,
-                            referenceImage: newsItem.image
+                            referenceImage: articleImage || newsItem.image,
+                            category: newsItem.category || 'All'
                         })
                     });
+                    
+                    console.log('[DEBUG] visualResponse status:', visualResponse.status);
+                    
+                    if (!visualResponse.ok) {
+                        throw new Error('/generate-fb-visual failed: ' + visualResponse.status);
+                    }
                     
                     const visualData = await visualResponse.json();
                     
                     if (visualData.posts && visualData.posts.length > 0) {
                         const typeColors = { 'Emotional': '#e74c3c', 'Controversial': '#f39c12', 'Informative': '#3498db', 'Aura': '#9b59b6' };
                         
+                        // Build article info section
+                        const articleInfoHTML = `
+                            <div style="background: linear-gradient(135deg, #1a1a2e 0%, #0d1117 100%); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #30363d;">
+                                <div style="color: #fff; font-size: 14px; margin-bottom: 12px; font-weight: bold;">📰 ARTICLE INFO</div>
+                                ${articleImage ? `<img src="${articleImage}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;" onerror="this.style.display='none'">` : ''}
+                                <div style="background: #0d1117; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                                    <div style="color: #8b949e; font-size: 11px; margin-bottom: 5px;">TITLE</div>
+                                    <div style="color: #fff; font-size: 15px; font-weight: 600; line-height: 1.4;">${newsItem.title}</div>
+                                </div>
+                                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                                    <div style="background: #0d1117; padding: 10px; border-radius: 8px; flex: 1;">
+                                        <div style="color: #8b949e; font-size: 10px; margin-bottom: 3px;">SOURCE</div>
+                                        <div style="color: #00ff88; font-size: 12px;">${newsItem.source}</div>
+                                    </div>
+                                    <div style="background: #0d1117; padding: 10px; border-radius: 8px; flex: 1;">
+                                        <div style="color: #8b949e; font-size: 10px; margin-bottom: 3px;">DATE</div>
+                                        <div style="color: #fff; font-size: 12px;">${new Date(newsItem.pubDate).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                                ${newsItem.link ? `<a href="${newsItem.link}" target="_blank" style="display: block; background: #238636; color: white; padding: 10px; border-radius: 8px; text-align: center; text-decoration: none; font-size: 13px;">🔗 Visit Original Source</a>` : ''}
+                            </div>
+                        `;
+                        
+                        // Build prompts section
+                        const promptsHTML = visualData.posts.map((post, idx) => {
+                            return `
+                                <div style="background: #0d1117; border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid #30363d;">
+                                    <div style="color: #58a6ff; font-size: 11px; margin-bottom: 8px; font-weight: bold;">PROMPT #${idx + 1}</div>
+                                    <div style="background: #1a1a2e; color: #c9d1d9; padding: 10px; border-radius: 6px; font-size: 12px; font-family: monospace; line-height: 1.5; max-height: 80px; overflow-y: auto; margin-bottom: 8px;">
+                                        ${post.imagePrompt}
+                                    </div>
+                                    <button class="copy-btn" onclick="copyToClipboard('${post.imagePrompt.replace(/'/g, "\\'")}')">📋 Copy Prompt</button>
+                                </div>
+                            `;
+                        }).join('');
+                        
                         let postsHTML = visualData.posts.map(post => {
                             const color = typeColors[post.type] || '#667eea';
+                            const originalImg = post.originalImage || articleImage || newsItem.image;
                             return `
                                 <div style="background: #0d1117; border-radius: 8px; padding: 15px; margin-bottom: 15px; border-left: 4px solid ${color};">
                                     <div style="color: ${color}; font-weight: bold; margin-bottom: 8px; font-size: 13px;">${post.type}</div>
@@ -852,11 +935,8 @@
                                         <button class="copy-btn" onclick="event.stopPropagation(); copyToClipboard('${post.fbCaption.replace(/'/g, "\\'")}')">Copy Caption</button>
                                         <button class="copy-btn" onclick="event.stopPropagation(); copyToClipboard('${post.hashtags.join(' ')}')">Copy Tags</button>
                                         <button class="copy-btn" onclick="event.stopPropagation(); copyToClipboard('${post.imagePrompt.replace(/'/g, "\\'")}')">Copy Prompt</button>
-                                        <button style="background: #667eea; color: white; padding: 8px 12px; font-size: 12px; border: none; border-radius: 4px; cursor: pointer;" onclick="console.log('Generate button clicked'); generateImageFromModal('${(post.imagePrompt || '').replace(/'/g, "\\'")}', '${(post.fbCaption || '').replace(/'/g, "\\'")}', '${(post.hashtags || []).join(' ')}')">🎨 Generate</button>
-                                    </div>
-                                    <div style="color: #8b949e; font-size: 11px; margin-bottom: 4px;">🎨 Image Prompt:</div>
-                                    <div style="background: #1a1a2e; color: #c9d1d9; padding: 10px; border-radius: 6px; font-size: 12px; font-family: monospace; max-height: 60px; overflow-y: auto;">
-                                        ${post.imagePrompt}
+                                        ${originalImg ? `<button class="copy-btn" onclick="event.stopPropagation(); copyToClipboard('${originalImg}')">Copy Image URL</button>` : ''}
+                                        <button style="background: #667eea; color: white; padding: 8px 12px; font-size: 12px; border: none; border-radius: 4px; cursor: pointer;" onclick="console.log('Generate button clicked'); generateImageFromModal('${(post.imagePrompt || '').replace(/'/g, "\\'")}', '${(post.fbCaption || '').replace(/'/g, "\\'")}', '${(post.hashtags || []).join(' ')}', '${originalImg || ''}', '${(newsItem.title || '').replace(/'/g, "\\'")}')">🎨 Generate AI</button>
                                     </div>
                                 </div>
                             `;
@@ -864,30 +944,48 @@
                         
                         body.innerHTML = `
                             <div style="padding: 15px;">
-                                ${newsItem.image ? `<img src="${newsItem.image}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px; background: #222;">` : ''}
-                                <h2 style="color: white; margin-bottom: 10px; font-size: 16px;">${newsItem.title}</h2>
-                                <div style="color: #00ff88; font-size: 11px; margin-bottom: 15px;">
-                                    ${newsItem.source} • ${new Date(newsItem.pubDate).toLocaleDateString()}
-                                </div>
-                                <div style="color: #fff; font-size: 14px; margin-bottom: 15px; font-weight: bold;">📱 Generated Content</div>
+                                ${articleInfoHTML}
+                                
+                                <div style="color: #fff; font-size: 14px; margin-bottom: 15px; font-weight: bold;">🎨 AI IMAGE PROMPTS</div>
+                                ${promptsHTML}
+                                
+                                <div style="color: #fff; font-size: 14px; margin: 20px 0 15px 0; font-weight: bold;">📱 GENERATED POSTS</div>
                                 ${postsHTML}
+                                
                                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #30363d;">
                                     <div style="color: #fff; font-size: 14px; margin-bottom: 15px; font-weight: bold;">📰 Full News Article</div>
                                     <div style="background: #1a1a2e; padding: 15px; border-radius: 8px; line-height: 1.8; color: #c9d1d9; font-size: 14px;">
                                         ${articleContent.replace(/\n/g, '<br>')}
                                     </div>
                                 </div>
-                                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                                    <a href="${newsItem.link}" target="_blank" class="copy-btn" style="flex: 1; padding: 10px; text-decoration: none; text-align: center;">🔗 Original Article</a>
-                                </div>
                             </div>
                         `;
                     } else {
+                        const articleInfoHTML = `
+                            <div style="background: linear-gradient(135deg, #1a1a2e 0%, #0d1117 100%); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #30363d;">
+                                <div style="color: #fff; font-size: 14px; margin-bottom: 12px; font-weight: bold;">📰 ARTICLE INFO</div>
+                                ${articleImage ? `<img src="${articleImage}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;" onerror="this.style.display='none'">` : ''}
+                                <div style="background: #0d1117; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                                    <div style="color: #8b949e; font-size: 11px; margin-bottom: 5px;">TITLE</div>
+                                    <div style="color: #fff; font-size: 15px; font-weight: 600; line-height: 1.4;">${newsItem.title}</div>
+                                </div>
+                                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                                    <div style="background: #0d1117; padding: 10px; border-radius: 8px; flex: 1;">
+                                        <div style="color: #8b949e; font-size: 10px; margin-bottom: 3px;">SOURCE</div>
+                                        <div style="color: #00ff88; font-size: 12px;">${newsItem.source}</div>
+                                    </div>
+                                    <div style="background: #0d1117; padding: 10px; border-radius: 8px; flex: 1;">
+                                        <div style="color: #8b949e; font-size: 10px; margin-bottom: 3px;">DATE</div>
+                                        <div style="color: #fff; font-size: 12px;">${new Date(newsItem.pubDate).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                                ${newsItem.link ? `<a href="${newsItem.link}" target="_blank" style="display: block; background: #238636; color: white; padding: 10px; border-radius: 8px; text-align: center; text-decoration: none; font-size: 13px;">🔗 Visit Original Source</a>` : ''}
+                            </div>
+                        `;
+                        
                         body.innerHTML = `
                             <div style="padding: 15px;">
-                                ${newsItem.image ? `<img src="${newsItem.image}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px; background: #222;">` : ''}
-                                <h2 style="color: white; margin-bottom: 10px; font-size: 16px;">${newsItem.title}</h2>
-                                <div style="color: #00ff88; font-size: 11px; margin-bottom: 15px;">${newsItem.source}</div>
+                                ${articleInfoHTML}
                                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #30363d;">
                                     <div style="color: #fff; font-size: 14px; margin-bottom: 15px; font-weight: bold;">📰 Full News Article</div>
                                     <div style="background: #1a1a2e; padding: 15px; border-radius: 8px; line-height: 1.8; color: #c9d1d9; font-size: 14px;">
@@ -898,7 +996,8 @@
                         `;
                     }
                 } catch (error) {
-                    body.innerHTML = `<div style="padding: 30px; text-align: center; color: #ff6b6b;">Error loading content.</div>`;
+                    console.error('[DEBUG] Error in tryAnalyze:', error);
+                    body.innerHTML = `<div style="padding: 30px; text-align: center; color: #ff6b6b;">Error: ${error.message}</div>`;
                 }
             }
             
@@ -1032,7 +1131,8 @@
                     body: JSON.stringify({ 
                         articleText: currentArticleText,
                         articleTitle: currentNewsItem?.title || null,
-                        referenceImage: currentNewsItem?.image
+                        referenceImage: currentNewsItem?.image,
+                        category: currentNewsItem?.category || 'All'
                     })
                 });
 
@@ -1090,7 +1190,7 @@
                                 </div>
                                 
                                 <div style="margin-top: 15px;">
-                                    <button class="generate-image-btn" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; width: 100%;" onclick="generateImage('${(post.imagePrompt || '').replace(/'/g, "\\'")}', currentNewsItem?.image)">🎨 Generate Image</button>
+                                    <button class="generate-image-btn" style="padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; width: 100%;" onclick="generateImage('${(post.imagePrompt || '').replace(/'/g, "\\'")}', '${originalImg || ''}')">🎨 Generate Image</button>
                                 </div>
                             </div>
                         `;
@@ -1136,24 +1236,29 @@
             document.body.removeChild(link);
         }
 
-        async function generateImageFromModal(prompt, caption, hashtags) {
+        async function generateImageFromModal(prompt, caption, hashtags, referenceImg, title) {
             console.log('currentNewsItem:', currentNewsItem);
             console.log('currentNewsItem.image:', currentNewsItem?.image);
             
-            if (!currentNewsItem?.image) {
+            // Use the reference image from posts if available, otherwise fallback to currentNewsItem
+            const refImage = referenceImg || currentNewsItem?.image;
+            // Use title from parameter or fallback to currentNewsItem title
+            const articleTitle = title || currentNewsItem?.title || '';
+            
+            if (!refImage) {
                 alert('No reference image available! Click on a headline first to load the news.');
                 return;
             }
             
             // Set the reference image
-            uploadedImage = currentNewsItem.image;
+            uploadedImage = refImage;
             
             // Show reference image in full size container
             const refContainer = document.getElementById('referenceImageContainer');
-            const refImage = document.getElementById('referenceImageDisplay');
-            if (refContainer && refImage) {
+            const refImageDisplay = document.getElementById('referenceImageDisplay');
+            if (refContainer && refImageDisplay) {
                 refContainer.style.display = 'block';
-                refImage.src = currentNewsItem.image;
+                refImageDisplay.src = refImage;
             }
             
             // Hide the small preview
@@ -1162,10 +1267,8 @@
                 imagePreview.innerHTML = '';
             }
             
-            // Set the title - clean and professional format
-            const rawTitle = currentNewsItem.title || '';
-            // Take title, convert to proper case (first letter caps)
-            let formattedTitle = rawTitle.replace(/\w+/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+            // Set the title - keep original casing, just clean up
+            let formattedTitle = articleTitle;
             // Keep it clean - max 55 chars
             if (formattedTitle.length > 55) {
                 formattedTitle = formattedTitle.substring(0, 52).replace(/\s+\S+$/, '') + '...';
@@ -1223,7 +1326,11 @@
             resultBox.appendChild(loadingDiv);
 
             const customPrompt = prompt;
-            const customTitle = document.getElementById('homeTitleInput')?.value?.trim() || '';
+            // Use article title as default if no custom title entered
+            let customTitle = document.getElementById('homeTitleInput')?.value?.trim() || '';
+            if (!customTitle && currentNewsItem?.title) {
+                customTitle = currentNewsItem.title;
+            }
             
             // Use reference image from news if provided
             const imageToUse = referenceImage || uploadedImage;
@@ -1233,42 +1340,102 @@
             const sizePreset = selectedSize ? selectedSize.dataset.preset : 'instagram-square';
 
             try {
+                const requestBody = { 
+                    prompt: customPrompt,
+                    title: customTitle,
+                    sizePreset: sizePreset,
+                    style: document.getElementById('styleSelect')?.value || 'cinematic',
+                    titleBarColor: document.getElementById('titleBarColorSelect')?.value || 'dark',
+                    titleBarTextColor: document.getElementById('titleBarTextColorSelect')?.value || 'white'
+                };
+                console.log('[DEBUG] Full request body:', JSON.stringify(requestBody).substring(0, 300));
+                
+                // Pass reference image - use imageToUse (from news article) or uploadedImage
+                const refImg = imageToUse || uploadedImage;
+                console.log('[DEBUG] Reference image being sent:', refImg ? refImg.substring(0, 80) : 'none');
+                if (refImg) requestBody.imageFile = refImg;
+                
                 const response = await fetch('/generate-visual', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        prompt: customPrompt,
-                        title: customTitle,
-                        imageFile: imageToUse,
-                        sizePreset: sizePreset,
-                        style: document.getElementById('styleSelect')?.value || 'cinematic',
-                        titleBarColor: document.getElementById('titleBarColorSelect')?.value || 'dark',
-                        titleBarTextColor: document.getElementById('titleBarTextColorSelect')?.value || 'white'
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
-                const data = await response.json();
+                console.log('[DEBUG] Response status:', response.status);
+                console.log('[DEBUG] Response content-type:', response.headers.get('content-type'));
+
+                if (!response.ok) {
+                    throw new Error('Server error: ' + response.status);
+                }
+                
+                const responseText = await response.text();
+                console.log('[DEBUG] Raw response:', responseText.substring(0, 200));
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('Failed to parse JSON:', e);
+                    resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ Server returned invalid response</div>';
+                    return;
+                }
+                console.log('[DEBUG] generate-visual response:', JSON.stringify(data).substring(0, 500));
+                console.log('[DEBUG] imageUrl:', data.imageUrl ? data.imageUrl.substring(0, 100) : 'none');
+                console.log('[DEBUG] error:', data.error);
+                console.log('[DEBUG] mode:', data.mode);
                 document.getElementById('imageLoading')?.remove();
+
+                if (data.error) {
+                    resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ Error: ' + data.error + '</div>';
+                    return;
+                }
 
                 if (data.imageUrl) {
                     const imgContainer = document.createElement('div');
                     imgContainer.id = 'generatedImageContainer';
                     const sizeInfo = data.size ? ` • ${data.size.width}×${data.size.height}` : '';
-                    imgContainer.innerHTML = `
-                        <div style="margin-top: 20px; padding: 15px; background: #1a1a2e; border-radius: 10px;">
-                            <h4 style="color: #fff; margin-bottom: 10px;">🖼️ Generated Image (${data.mode === 'img2img' ? 'Image-to-Image' : 'Text-to-Image'})${sizeInfo}</h4>
-                            <div style="text-align: center; padding: 20px;">
-                                <div class="loading">Generating image...</div>
-                                <p style="color: #8b949e; font-size: 13px; margin-top: 10px;">Please wait 20-30 seconds</p>
+                    
+                    // Check if there are multiple variations
+                    let imagesHTML = '';
+                    
+                    // Always show main image first
+                    imagesHTML += `
+                        <div style="margin-bottom: 20px;">
+                            <div style="color: #00ff88; font-size: 12px; margin-bottom: 5px;">Main Image</div>
+                            <div style="text-align: center; padding: 15px; background: #0d1117; border-radius: 8px;">
+                                <img src="${data.imageUrl}" class="generated-image" alt="Generated Image" style="max-width: 100%; cursor: pointer;" onclick="openImageFullscreen('${data.imageUrl}')"/>
                             </div>
-                            <img src="${data.imageUrl}" class="generated-image" alt="Generated Image" style="margin-top: 10px; cursor: pointer;" onclick="openImageFullscreen('${data.imageUrl}')" onload="this.previousElementSibling.style.display='none'" onerror="setTimeout(() => { this.src = '${data.imageUrl}&t=' + Date.now(); }, 3000);"/>
-                            <div style="margin-top: 10px;">
-                                <button class="copy-btn" onclick="copyToClipboard('${data.imageUrl}')">Copy Image URL</button>
-                                <a href="${data.imageUrl}" target="_blank" class="copy-btn" style="text-decoration: none;">Open in New Tab</a>
-                                <button class="fullscreen-btn" onclick="openImageFullscreen('${data.imageUrl}')" style="margin-left: 8px;">⛶ Full Screen</button>
+                            <div style="margin-top: 8px;">
+                                <button class="copy-btn" onclick="copyToClipboard('${data.imageUrl}')">Copy URL</button>
+                                <a href="${data.imageUrl}" target="_blank" class="copy-btn" style="text-decoration: none;">Open</a>
                             </div>
                         </div>
                     `;
+                    
+                    // Show all variations if available
+                    if (data.variations && data.variations.length > 1) {
+                        imagesHTML += `<div style="color: #58a6ff; font-size: 14px; margin: 15px 0 10px 0;">✨ ${data.variations.length} Variations</div>`;
+                        data.variations.forEach((variation, index) => {
+                            imagesHTML += `
+                                <div style="margin-bottom: 15px;">
+                                    <div style="color: #8b949e; font-size: 11px; margin-bottom: 5px;">${variation.variation || 'Variation ' + (index + 1)}</div>
+                                    <div style="text-align: center; padding: 10px; background: #0d1117; border-radius: 8px;">
+                                        <img src="${variation.imageUrl}" alt="Variation ${index + 1}" style="max-width: 100%; cursor: pointer;" onclick="openImageFullscreen('${variation.imageUrl}')"/>
+                                    </div>
+                                    <div style="margin-top: 5px;">
+                                        <button class="copy-btn" onclick="copyToClipboard('${variation.imageUrl}')">Copy</button>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    imgContainer.innerHTML = `
+                        <div style="margin-top: 20px; padding: 15px; background: #1a1a2e; border-radius: 10px;">
+                            <h4 style="color: #fff; margin-bottom: 10px;">🖼️ Generated Image (${data.mode === 'img2img' ? 'Image-to-Image' : 'Text-to-Image'})${sizeInfo}</h4>
+                            ${imagesHTML}
+                        </div>`;
+                    
                     const existingContainer = document.getElementById('generatedImageContainer');
                     if (existingContainer) existingContainer.remove();
                     resultBox.appendChild(imgContainer);
@@ -1285,7 +1452,8 @@
                 }
             } catch (error) {
                 document.getElementById('imageLoading')?.remove();
-                resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ Error occurred. Try again.</div>';
+                console.error('Image generation error:', error);
+                resultBox.innerHTML += '<div style="color: #ff6b6b; margin-top: 10px;">❌ Error: ' + error.message + '. Try again.</div>';
             }
         }
 
@@ -1468,7 +1636,11 @@
             const customPrompt = document.getElementById('homeCustomPrompt')?.value?.trim();
             if (!customPrompt) return alert('Please enter a prompt for image generation!');
             
-            const customTitle = document.getElementById('homeTitleInput')?.value?.trim() || '';
+            // Use article title as default if no custom title entered
+            let customTitle = document.getElementById('homeTitleInput')?.value?.trim() || '';
+            if (!customTitle && currentNewsItem?.title) {
+                customTitle = currentNewsItem.title;
+            }
             
             const resultBox = document.getElementById('homeImageResult');
             const selectedStyle = document.getElementById('styleSelect')?.value || 'cinematic';
@@ -1530,7 +1702,6 @@
                     body: JSON.stringify({ 
                         prompt: customPrompt,
                         title: customTitle,
-                        imageFile: imageFile,
                         logo: homeUploadedLogo,
                         sizePreset: sizePreset,
                         style: selectedStyle,
@@ -1542,6 +1713,10 @@
                 });
 
                 clearInterval(progressInterval);
+                
+                if (!response.ok) {
+                    throw new Error('Server error: ' + response.status);
+                }
                 
                 const data = await response.json();
                 
